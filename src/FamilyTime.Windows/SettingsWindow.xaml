@@ -1,0 +1,49 @@
+<Window x:Class="FamilyTime.Windows.SettingsWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Настройки — Family Time" Width="800" Height="750" MinWidth="730" MinHeight="570" WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Icon="Assets/app.ico">
+  <Grid Margin="26"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <StackPanel Margin="0,0,0,20"><TextBlock x:Name="Heading" Text="Настройки семьи" FontSize="26" FontWeight="SemiBold"/><TextBlock x:Name="AccountText" Foreground="{StaticResource Muted}" Margin="0,7,0,0" TextWrapping="Wrap"/></StackPanel>
+    <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0">
+      <TabItem Header="Учёт и лимит" Padding="12,9"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="0,18,10,0">
+        <Border Background="#EAF0FC" CornerRadius="10" Padding="14"><TextBlock Text="Приложение видно в области уведомлений. Оно сохраняет время, названия приложений и домены сайтов. Учёт начнётся после сохранения настроек." TextWrapping="Wrap"/></Border>
+        <TextBlock Text="Имя профиля в отчётах" Style="{StaticResource Label}" Margin="0,18,0,7"/><TextBox x:Name="ProfileBox" MaxLength="60"/>
+        <CheckBox x:Name="AutoStartBox" Content="Запускать при входе в эту учётную запись Windows" Margin="0,14,0,12"/>
+        <CheckBox x:Name="LimitEnabledBox" Content="Дневной лимит с уведомлением родителю и ребёнку"/>
+        <Grid Margin="0,10,0,4"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="18"/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Лимит, минут в день" Style="{StaticResource Label}"/><TextBox x:Name="LimitBox"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="Предупредить ребёнка за, минут" Style="{StaticResource Label}"/><TextBox x:Name="WarningBox"/></StackPanel></Grid>
+        <TextBlock Text="0 минут — без предварительного предупреждения. После достижения лимита учёт продолжается; компьютер не блокируется." Foreground="{StaticResource Muted}" TextWrapping="Wrap" FontSize="12" Margin="0,5,0,18"/>
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="18"/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Простой после, минут без ввода" Style="{StaticResource Label}"/><TextBox x:Name="IdleBox"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="Конец сеанса после перерыва, минут" Style="{StaticResource Label}"/><TextBox x:Name="SessionBox"/></StackPanel></Grid>
+        <TextBlock x:Name="ZoneText" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,18,0,12" TextWrapping="Wrap"/>
+        <Button Content="Проверить уведомление Windows" Click="TestNoticeClick" HorizontalAlignment="Left"/>
+        <TextBlock Text="Windows может скрыть баннер в режиме «Не беспокоить» или в игре. Остаток всегда виден в окне приложения." Foreground="{StaticResource Muted}" FontSize="12" TextWrapping="Wrap" Margin="0,8,0,12"/>
+      </StackPanel></ScrollViewer></TabItem>
+      <TabItem Header="Браузер" Padding="12,9"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="0,20,10,0">
+        <TextBlock Text="Подключите Chrome или Edge" FontSize="21" FontWeight="SemiBold"/><TextBlock Text="Без расширения браузер учитывается как одно приложение. Расширение добавляет активный домен и воспроизведение YouTube; адреса страниц, поисковые запросы и названия видео не сохраняются." TextWrapping="Wrap" Margin="0,14,0,22"/>
+        <TextBlock Text="1. Откройте chrome://extensions или edge://extensions.&#10;2. Включите режим разработчика.&#10;3. Нажмите «Загрузить распакованное расширение».&#10;4. Выберите папку extension из установленной программы.&#10;5. Откройте обычную вкладку и проверьте состояние ниже." TextWrapping="Wrap" LineHeight="27"/>
+        <StackPanel Orientation="Horizontal" Margin="0,20,0,16"><Button Content="Открыть папку расширения" Click="ExtensionFolderClick" Style="{StaticResource Primary}"/><Button Content="Скопировать путь" Click="ExtensionPathClick"/></StackPanel>
+        <TextBlock x:Name="ExtensionStatus" FontWeight="SemiBold" Margin="0,8,0,16"/><Button Content="Восстановить связь с браузером" Click="RegisterClick" HorizontalAlignment="Left"/>
+        <TextBlock Text="Предварительная версия: расширение устанавливается вручную. Используйте один обычный профиль каждого браузера. Режим инкогнито и другие браузеры пока без детализации." Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,22,0,0"/>
+      </StackPanel></ScrollViewer></TabItem>
+      <TabItem Header="Telegram" Padding="12,9"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="0,20,10,0">
+        <TextBlock Text="Собственный бот вашей семьи" FontSize="21" FontWeight="SemiBold"/><TextBlock Text="1. Откройте официальный @BotFather в Telegram.&#10;2. Отправьте /newbot и создайте бота.&#10;3. Вставьте полученный токен здесь. Он сохранится зашифрованным для этой учётной записи Windows." TextWrapping="Wrap" LineHeight="25" Margin="0,14,0,14"/>
+        <Button Content="Открыть BotFather" Click="BotFatherClick" HorizontalAlignment="Left" Margin="0,0,0,14"/>
+        <TextBlock Text="Токен бота" Style="{StaticResource Label}"/><PasswordBox x:Name="TokenBox" MaxLength="200"/>
+        <StackPanel Orientation="Horizontal" Margin="0,12,0,8"><Button x:Name="ConnectButton" Content="Проверить токен и привязать родителя" Click="ConnectClick" Style="{StaticResource Primary}"/><Button Content="Отключить" Click="DisconnectClick"/></StackPanel>
+        <Border x:Name="PairPanel" Background="#EAF0FC" Padding="16" CornerRadius="10" Margin="0,12" Visibility="Collapsed"><StackPanel><TextBlock Text="Откройте ссылку на телефоне родителя и нажмите START. Ссылка действует 10 минут; получатель отчётов определяется этой привязкой." TextWrapping="Wrap"/><TextBox x:Name="PairLink" IsReadOnly="True" Margin="0,12"/><StackPanel Orientation="Horizontal"><Button Content="Скопировать ссылку" Click="CopyPairClick"/><Button Content="Открыть бота" Click="OpenPairClick"/></StackPanel></StackPanel></Border>
+        <TextBlock x:Name="TelegramStatus" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,12"/>
+        <TextBlock Text="После привязки доступны кнопки «Отчёт за сегодня» и «Сколько осталось». Один токен — один компьютер. Ответ приходит, когда компьютер включён, приложение работает и есть интернет." Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,16"/>
+        <Button Content="Отправить пробный отчёт" Click="TestTelegramClick" HorizontalAlignment="Left"/>
+      </StackPanel></ScrollViewer></TabItem>
+      <TabItem Header="Отчёты и данные" Padding="12,9"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="0,20,10,0">
+        <TextBlock Text="Автоматические отчёты" FontSize="21" FontWeight="SemiBold" Margin="0,0,0,12"/>
+        <CheckBox x:Name="SessionReportBox" Content="После завершения сеанса"/><CheckBox x:Name="DailyReportBox" Content="Итог завершённого дня — при следующем запуске или после полуночи"/>
+        <CheckBox x:Name="WeeklyReportBox" Content="Итог завершённой недели"/><CheckBox x:Name="EveningReportBox" Content="Вечерний срез текущего дня"/>
+        <StackPanel Orientation="Horizontal" Margin="0,8,0,22"><TextBlock Text="Вечерний отчёт после, час (0–23)" VerticalAlignment="Center"/><TextBox x:Name="EveningHourBox" Width="65" Margin="16,0,0,0"/></StackPanel>
+        <TextBlock Text="Хранение на компьютере" FontSize="21" FontWeight="SemiBold" Margin="0,0,0,16"/>
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="18"/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Подробные интервалы, дней" Style="{StaticResource Label}"/><TextBox x:Name="HistoryDaysBox"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="Дневные итоги, дней" Style="{StaticResource Label}"/><TextBox x:Name="SummaryDaysBox"/></StackPanel></Grid>
+        <TextBlock x:Name="QueueStatus" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,22,0,12"/>
+        <StackPanel Orientation="Horizontal"><Button Content="Повторить отправку ошибок" Click="RetryClick"/><Button Content="Папка данных" Click="DataFolderClick"/></StackPanel>
+        <Button Content="Удалить историю на этом компьютере…" Click="ClearClick" HorizontalAlignment="Left" Foreground="#B42318" Margin="0,22,0,0"/>
+        <Button x:Name="DonateButton" Content="Поддержать разработку" Click="DonateClick" HorizontalAlignment="Left" Margin="0,20,0,12" Visibility="Collapsed"/>
+      </StackPanel></ScrollViewer></TabItem>
+    </TabControl>
+    <DockPanel Grid.Row="2" Margin="0,20,0,0"><StackPanel Orientation="Horizontal" DockPanel.Dock="Right"><Button Content="Закрыть" Click="CloseClick"/><Button x:Name="SaveButton" Content="Сохранить" Click="SaveClick" Style="{StaticResource Primary}" Margin="0"/></StackPanel><TextBlock x:Name="StatusText" Foreground="{StaticResource Muted}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,14,0"/></DockPanel>
+  </Grid>
+</Window>

@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FamilyTime.Core/FamilyTime.Core.csproj" />
+    <Project Path="src/FamilyTime.Windows/FamilyTime.Windows.csproj" />
+    <Project Path="src/FamilyTime.NativeHost/FamilyTime.NativeHost.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FamilyTime.Tests/FamilyTime.Tests.csproj" />
+  </Folder>
+</Solution>

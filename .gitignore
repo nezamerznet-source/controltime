@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+artifacts/
+.vs/
+*.user
+*.db
+*.db-wal
+*.db-shm
+*.pfx
+*.pem
+*.log
+.env*

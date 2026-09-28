@@ -1,0 +1,41 @@
+name: Windows build
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '10.0.112'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Install NSIS
+        shell: pwsh
+        run: choco install nsis --version=3.09 -y --no-progress --allow-downgrade
+      - name: Test and package
+        shell: pwsh
+        run: python packaging/build.py
+      - name: Preserve installer, source and extension
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: FamilyTime-windows
+          path: |
+            artifacts/FamilyTime-*-Setup.exe
+            artifacts/FamilyTime-*-Source.zip
+            artifacts/FamilyTime-*-Extension.zip
+            artifacts/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14

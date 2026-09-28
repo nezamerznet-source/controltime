@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "Family Time — учёт сайтов",
+  "version": "0.1.0",
+  "description": "Локальный учёт активных сайтов и воспроизведения YouTube для семейной статистики.",
+  "minimum_chrome_version": "120",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAm87s/JAtbQJL5AzwAQRAxlSus0WZyisnpqmlvSskwHYOSpSYNfPxU6J7n3APd+NeROSq9vMKSS1MBpSM2N4gu+Z59vTzn+/3tiZHs+EFNJMNsHppj1yQkev1LbfEIYvwHDcSiRicsQiQnpvRGWE3ZXRcMWV9mrkEC1xqSAJMSwK5U/IwQ9zj4XjJiDTHVZ+yqEaO3oHqKg/nHJgLlMtx/TjncKJnaYw67qhW3bQMV4ENwJ1yIUMwxY6gp6xJehTIDg7QuNOVe2Wtslo8pe2xmNcPkP73xvzKue5EYOWoOqpPrqOA//e0NuHkQB6szY2HVeo3hD1OoS5Askgs+6aMRQIDAQAB",
+  "permissions": [
+    "tabs",
+    "storage",
+    "nativeMessaging",
+    "alarms"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://youtube.com/*",
+        "https://m.youtube.com/*"
+      ],
+      "js": [
+        "youtube.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Family Time"
+  },
+  "icons": {
+    "16": "icon16.png",
+    "32": "icon32.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
