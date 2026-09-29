@@ -24,9 +24,9 @@ public sealed class AppRuntime : IDisposable
     public TelegramWorker Telegram { get; }
     public event Action<string, string>? Notify;
 
-    public AppRuntime()
+    public AppRuntime(string? dataDirectory = null)
     {
-        Store = new ActivityStore(Path.Combine(WindowsIntegration.DataDirectory, "activity.db"));
+        Store = new ActivityStore(Path.Combine(dataDirectory ?? WindowsIntegration.DataDirectory, "activity.db"));
         config = Store.LoadSettings(); Paused = Store.GetMeta("paused") == "1";
         var now = DateTimeOffset.UtcNow; var previous = Store.LastObservedEnd();
         if (config.SetupCompleted && previous.HasValue && now - previous.Value > TimeSpan.FromSeconds(2))

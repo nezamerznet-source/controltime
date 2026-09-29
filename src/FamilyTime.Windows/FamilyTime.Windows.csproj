@@ -15,5 +15,8 @@
     <!-- The UI is WPF; WinForms is used only for NotifyIcon. WPF DPI is declared in the manifest. -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="Assets/app.ico" />
+  </ItemGroup>
   <ItemGroup><ProjectReference Include="../FamilyTime.Core/FamilyTime.Core.csproj" /></ItemGroup>
 </Project>

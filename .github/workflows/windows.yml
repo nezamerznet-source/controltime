@@ -39,3 +39,23 @@ jobs:
             artifacts/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: FamilyTime-windows
+          path: artifacts
+      - name: Publish verified preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        shell: bash
+        run: |
+          gh release create v0.1.1 artifacts/* --target "$RELEASE_COMMIT" --prerelease --title "Family Time 0.1.1 — startup fix" --notes "Fixes a missing WPF icon resource that prevents the main window from opening. Adds startup error details and a local diagnostic log. The build now loads both Windows UI windows and initializes its database before packaging. Install over 0.1.0; existing family data is preserved. Full interactive monitoring and Telegram acceptance testing are still required on a family PC."

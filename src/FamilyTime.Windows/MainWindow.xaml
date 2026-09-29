@@ -56,7 +56,7 @@
           <TextBlock Text="История хранится на этом компьютере. В Telegram уходят только отчёты вашему боту. Приложение не записывает переписку, нажатия клавиш и содержимое экрана." TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,18"/>
           <TextBlock Text="Если компьютер выключен, спит или приложение закрыто, запрос Telegram не получит немедленного ответа. Состояние «простой» — оценка по отсутствию ввода; просмотр видео и игры с контроллером требуют проверки на вашем компьютере." TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,22"/>
           <StackPanel Orientation="Horizontal"><Button x:Name="SupportButton" Content="Поддержать разработку" Style="{StaticResource Primary}" Click="SupportClick" Visibility="Collapsed"/><Button x:Name="RepositoryButton" Content="Исходники на GitHub" Click="RepositoryClick" Visibility="Collapsed"/><Button Content="Открыть инструкцию" Click="DocsClick"/></StackPanel>
-          <TextBlock Text="Версия 0.1.0 • предварительная сборка • Windows 11 x64" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,26,0,0"/>
+          <TextBlock Text="Версия 0.1.1 • предварительная сборка • Windows 11 x64" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,26,0,0"/>
         </StackPanel>
       </TabItem>
     </TabControl>

@@ -127,6 +127,15 @@ def main() -> None:
             if target.exists(): shutil.rmtree(target)
             run([dotnet, "publish", f"src/{project}/{project}.csproj", "-c", "Release", "-r", "win-x64", "--self-contained", "true",
                  "-p:DebugType=None", "-p:DebugSymbols=false", "-o", str(target)])
+    if os.name == "nt":
+        # Exercise native Windows SQLite and both WPF windows before packaging.
+        try:
+            subprocess.run([str(APP / "FamilyTime.exe"), "--startup-check"], check=True, timeout=30)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            import tempfile
+            log = Path(tempfile.gettempdir()) / "FamilyTime-startup-error.txt"
+            if log.exists(): print(log.read_text("utf-8"), file=sys.stderr)
+            raise
     package()
 
 

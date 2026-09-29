@@ -6,6 +6,7 @@ namespace FamilyTime.Windows;
 
 public partial class App : System.Windows.Application
 {
+    private string? startupCheckDirectory;
     private Mutex? singleton;
     private EventWaitHandle? showEvent;
     private RegisteredWaitHandle? showRegistration;
@@ -21,6 +22,21 @@ public partial class App : System.Windows.Application
         if (e.Args.Contains("--register")) { try { WindowsIntegration.RegisterBrowser(); Shutdown(0); } catch { Shutdown(1); } return; }
         if (e.Args.Contains("--unregister")) { try { WindowsIntegration.Unregister(); Shutdown(0); } catch { Shutdown(1); } return; }
         if (e.Args.Contains("--shutdown")) { Shutdown(RequestShutdown()); return; }
+        if (e.Args.Contains("--startup-check"))
+        {
+            startupCheckDirectory = Path.Combine(Path.GetTempPath(), "FamilyTime-check-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Runtime = new AppRuntime(startupCheckDirectory);
+                Dashboard = new MainWindow(Runtime); MainWindow = Dashboard;
+                using var testTray = new Forms.NotifyIcon { Text = "Family Time", Icon = SystemIcons.Application };
+                // Load both XAML trees without starting monitoring, Telegram or changing autostart.
+                var settingsWindow = new SettingsWindow(Runtime);
+                Shutdown(0);
+            }
+            catch (Exception ex) { WriteStartupError(ex, Path.GetTempPath()); Shutdown(1); }
+            return;
+        }
         singleton = new Mutex(true, @"Local\FamilyTime." + WindowsIntegration.Identity, out bool first);
         ownsSingleton = first;
         if (!first)
@@ -48,11 +64,30 @@ public partial class App : System.Windows.Application
             Runtime.Start();
             if (!e.Args.Contains("--tray") || !Runtime.Settings.SetupCompleted) ShowDashboard();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            MessageBox.Show("Family Time не смог запуститься. Проверьте свободное место и права на папку %LOCALAPPDATA%\\FamilyTime. Существующие данные не удалялись.", "Family Time", MessageBoxButton.OK, MessageBoxImage.Error);
+            var log = WriteStartupError(ex, WindowsIntegration.DataDirectory);
+            var detail = ex.GetBaseException();
+            MessageBox.Show($"Family Time не смог запуститься. Существующие данные не удалялись.\n\nПричина: {detail.GetType().Name}: {detail.Message}\n\n" +
+                (log is null ? "Не удалось записать журнал ошибки. Сохраните снимок этого окна." : $"Журнал ошибки: {log}"),
+                "Family Time", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(1);
         }
+    }
+    private static string? WriteStartupError(Exception error, string directory)
+    {
+        foreach (var target in new[] { directory, Path.GetTempPath() })
+        {
+            try
+            {
+                Directory.CreateDirectory(target);
+                var path = Path.Combine(target, "FamilyTime-startup-error.txt");
+                File.WriteAllText(path, $"{DateTimeOffset.Now:O}\n{Environment.OSVersion}\n{error}");
+                return path;
+            }
+            catch { }
+        }
+        return null;
     }
     public void ShowDashboard() => Dispatcher.BeginInvoke(() => { Dashboard.Show(); Dashboard.WindowState = WindowState.Normal; Dashboard.Activate(); });
     public void ShowNotification(string title, string body)
@@ -78,6 +113,10 @@ public partial class App : System.Windows.Application
         if (Dashboard is not null) Dashboard.AllowClose = true;
         showRegistration?.Unregister(null); showEvent?.Dispose(); exitRegistration?.Unregister(null); exitEvent?.Dispose(); Runtime?.Dispose();
         if (tray is not null) { tray.Visible = false; tray.Dispose(); }
+        if (startupCheckDirectory is not null)
+        {
+            try { Directory.Delete(startupCheckDirectory, true); } catch { }
+        }
         if (ownsSingleton) singleton?.ReleaseMutex(); singleton?.Dispose(); base.OnExit(e);
     }
 }

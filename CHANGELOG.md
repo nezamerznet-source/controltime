@@ -1,3 +1,10 @@
+# 0.1.1 — Startup fix
+
+- Include the main window icon as a WPF resource (the executable icon alone is insufficient).
+- Display the underlying startup error and save a local diagnostic log; fall back to the temporary folder if the data folder is unavailable.
+- Before packaging on Windows, initialize the database and load both WPF windows using an isolated temporary profile. Abort packaging on failure or timeout.
+- Existing databases and family settings are preserved.
+
 # Изменения
 
 ## 0.1.0 — предварительная сборка
