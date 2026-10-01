@@ -53,7 +53,8 @@ public partial class SettingsWindow : Window
             EveningReport = EveningReportBox.IsChecked == true, EveningHour = Number(EveningHourBox, "Час отчёта"),
             HistoryDays = Number(HistoryDaysBox, "Срок истории"), SummaryDays = Number(SummaryDaysBox, "Срок итогов")
         });
-        SaveButton.Content = "Сохранить"; StatusText.Text = "Настройки сохранены. Учёт работает.";
+        Heading.Text = "Настройки семьи";
+        SaveButton.Content = "Сохранить изменения"; StatusText.Text = "Настройки сохранены. Учёт работает. Telegram можно подключить на соседней вкладке.";
     }
     void RefreshStatus()
     {

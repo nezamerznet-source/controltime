@@ -179,6 +179,17 @@ public partial class App : System.Windows.Application
             Runtime.UpdateSettings(c => c with { ParentPasswordHash = hash });
             if (!Runtime.Parent.Required || Runtime.Parent.Check("wrong") is null || Runtime.Parent.Check("parent-check-123") is not null)
                 throw new Exception("Parent password verification failed.");
+            void CancelNextPassword() => Dispatcher.BeginInvoke(() =>
+            {
+                foreach (var open in Windows.OfType<PasswordPrompt>().ToArray()) open.Close();
+            });
+            CancelNextPassword(); Dashboard.OpenSettings();
+            if (Dashboard.OpenSettingsWindow is not null) throw new Exception("Cancelled parent prompt opened settings.");
+            bool pausedBefore = Runtime.Paused;
+            CancelNextPassword();
+            ((System.Windows.Controls.Button)Dashboard.FindName("PauseButton")).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            if (Runtime.Paused != pausedBefore) throw new Exception("Cancelled parent prompt changed accounting state.");
+            CancelNextPassword(); TryExit();
             // Loading the prompt also checks its help control and layout without granting access.
             var prompt = new PasswordPrompt("Проверка родительской защиты", Runtime.Parent.Check);
             prompt.Show(); prompt.Close();
