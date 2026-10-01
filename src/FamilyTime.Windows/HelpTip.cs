@@ -24,6 +24,7 @@ public sealed class HelpTip : Button
     public string Text { get => (string)GetValue(TextProperty); set => SetValue(TextProperty, value); }
     public HelpTip()
     {
+        if (Application.Current?.TryFindResource(typeof(Button)) is Style buttonStyle) Style = buttonStyle;
         Content = "?"; Width = 24; Height = 24; Padding = new Thickness(0); Margin = new Thickness(6, 0, 0, 0);
         FontWeight = FontWeights.SemiBold; Foreground = new SolidColorBrush(Color.FromRgb(37, 99, 235));
         VerticalAlignment = VerticalAlignment.Center; HorizontalAlignment = HorizontalAlignment.Left;

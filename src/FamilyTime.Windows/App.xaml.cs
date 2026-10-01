@@ -158,9 +158,15 @@ public partial class App : System.Windows.Application
             settings.SaveAndContinue(); await Task.Delay(150);
             if (!settings.IsVisible || !Dashboard.IsVisible || !Runtime.Settings.SetupCompleted)
                 throw new Exception("Saving first-run settings hid a window or did not start accounting.");
+            // Deterministic data in the isolated test database ensures category templates are rendered,
+            // even if the CI desktop happens to report idle/locked. An empty dashboard missed this crash.
+            var sampleEnd = DateTimeOffset.UtcNow.AddMinutes(-1);
+            Runtime.Store.Append([new(sampleEnd.AddMinutes(-1), sampleEnd, ActivityKind.Active,
+                "ui-check-game", "Тестовая игра", "", "Игры")], Runtime.Settings.Zone);
             await Task.Run(() => Runtime.Tick());
             await Task.Delay(1100); await Task.Run(() => Runtime.Tick());
             if (Runtime.LastObservation is null) throw new Exception("Accounting did not start after saving settings.");
+            Dashboard.Refresh(); Dashboard.UpdateLayout();
             string previews = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "ui-checks"));
             UiCheck.Capture(Dashboard, Path.Combine(previews, "dashboard.png"));
             await settings.CaptureChecks(previews);
