@@ -16,6 +16,8 @@ public sealed class AppRuntime : IDisposable
     private DateTimeOffset lastSchedule, lastPrune;
     private string encryptedCache = "", tokenCache = "";
     private AppSettings config;
+    private readonly bool integrateWindows;
+    public ParentAccess Parent { get; }
     public AppSettings Settings { get { lock (gate) return config; } }
     public bool Paused { get; private set; }
     public string State { get; private set; } = "Настройка";
@@ -24,10 +26,12 @@ public sealed class AppRuntime : IDisposable
     public TelegramWorker Telegram { get; }
     public event Action<string, string>? Notify;
 
-    public AppRuntime(string? dataDirectory = null)
+    public AppRuntime(string? dataDirectory = null, bool integrateWindows = true)
     {
+        this.integrateWindows = integrateWindows;
         Store = new ActivityStore(Path.Combine(dataDirectory ?? WindowsIntegration.DataDirectory, "activity.db"));
         config = Store.LoadSettings(); Paused = Store.GetMeta("paused") == "1";
+        Parent = new ParentAccess(Store, () => Settings);
         var now = DateTimeOffset.UtcNow; var previous = Store.LastObservedEnd();
         if (config.SetupCompleted && previous.HasValue && now - previous.Value > TimeSpan.FromSeconds(2))
         {
@@ -97,7 +101,8 @@ public sealed class AppRuntime : IDisposable
             if (next.LimitMinutes != config.LimitMinutes || next.LimitEnabled != config.LimitEnabled || next.WarningMinutes != config.WarningMinutes)
                 next = next with { LimitRevision = config.LimitRevision + 1 };
             bool changedLimit = next.LimitRevision != config.LimitRevision;
-            Store.SaveSettings(next); config = next; WindowsIntegration.AutoStart(config.AutoStart);
+            Store.SaveSettings(next); config = next;
+            if (integrateWindows) WindowsIntegration.AutoStart(config.AutoStart);
             if (changedLimit)
             {
                 var now = DateTimeOffset.UtcNow; var today = Format.Day(now, config.Zone);

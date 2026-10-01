@@ -18,6 +18,29 @@ void Near(double expected, double actual) { if (Math.Abs(expected - actual) > .0
 void True(bool value) { if (!value) throw new Exception("Expected true"); }
 var idleThreshold = TimeSpan.FromMinutes(5);
 
+Test("parent password is salted, unicode-safe and rejects wrong input", () =>
+{
+    const string password = "Пароль-родителя-123";
+    var first = ParentPassword.Create(password); var second = ParentPassword.Create(password);
+    True(first != second); True(!first.Contains(password));
+    True(ParentPassword.Verify(password, first)); True(!ParentPassword.Verify("wrong", first));
+    True(!ParentPassword.Verify(password, "")); True(!ParentPassword.Verify(password, "damaged"));
+    True(!ParentPassword.Verify(password, first.Replace("600000", "999999999")));
+    True(!ParentPassword.Verify(new string('x', 129), first));
+    bool rejected = false; try { ParentPassword.Create("short"); } catch (ArgumentException) { rejected = true; }
+    True(rejected);
+});
+Test("legacy settings load without password and new verifier survives save", () =>
+{
+    var legacy = JsonSerializer.Deserialize<AppSettings>("{\"setupCompleted\":true}", Wire.Json)!;
+    Equal("", legacy.ParentPasswordHash);
+    using var store = new ActivityStore(":memory:");
+    var hash = ParentPassword.Create("parent-12345");
+    store.SaveSettings(config with { ParentPasswordHash = hash });
+    True(ParentPassword.Verify("parent-12345", store.LoadSettings().ParentPasswordHash));
+    store.ClearHistory(); Equal(hash, store.LoadSettings().ParentPasswordHash);
+});
+
 Test("foreground switches partition elapsed time without browser double count", () =>
 {
     var engine = new AccountingEngine(); using var store = new ActivityStore(":memory:");

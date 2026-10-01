@@ -9,6 +9,15 @@ public partial class SettingsWindow : Window
     private readonly AppRuntime runtime;
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(2) };
     private bool busy;
+    internal async Task CaptureChecks(string directory)
+    {
+        for (int i = 0; i < SettingsTabs.Items.Count; i++)
+        {
+            SettingsTabs.SelectedIndex = i; UpdateLayout(); await Task.Delay(60);
+            UiCheck.Capture(this, Path.Combine(directory, $"settings-{i}.png"));
+        }
+        SettingsTabs.SelectedIndex = 0;
+    }
     public SettingsWindow(AppRuntime runtime)
     {
         InitializeComponent(); this.runtime = runtime;
@@ -24,6 +33,7 @@ public partial class SettingsWindow : Window
         EveningReportBox.IsChecked = c.EveningReport; EveningHourBox.Text = c.EveningHour.ToString();
         HistoryDaysBox.Text = c.HistoryDays.ToString(); SummaryDaysBox.Text = c.SummaryDays.ToString();
         DonateButton.Visibility = Branding.Valid(Branding.Support(c)) ? Visibility.Visible : Visibility.Collapsed;
+        RefreshProtection();
         timer.Tick += (_, _) => RefreshStatus(); timer.Start(); Closed += (_, _) => timer.Stop();
         RefreshStatus();
     }
@@ -58,7 +68,8 @@ public partial class SettingsWindow : Window
         }
         catch { StatusText.Text = "Не удалось прочитать состояние подключения."; }
     }
-    void SaveClick(object sender, RoutedEventArgs e) => Guard(() => { Save(); Close(); });
+    internal void SaveAndContinue() { Save(); ((App)Application.Current).Dashboard.Refresh(); }
+    void SaveClick(object sender, RoutedEventArgs e) => Guard(SaveAndContinue);
     void CloseClick(object sender, RoutedEventArgs e) => Close();
     void TestNoticeClick(object sender, RoutedEventArgs e) => ((App)Application.Current).ShowNotification("Family Time", "Проверка уведомления. Так приложение напомнит о дневном лимите.");
     void ExtensionFolderClick(object sender, RoutedEventArgs e) => Guard(() => WindowsIntegration.OpenFolder(Path.Combine(AppContext.BaseDirectory, "extension")));
@@ -95,6 +106,29 @@ public partial class SettingsWindow : Window
         runtime.ClearHistory(); StatusText.Text = "История и очередь удалены.";
     });
     void DonateClick(object sender, RoutedEventArgs e) => Guard(() => WindowsIntegration.OpenHttps(Branding.Support(runtime.Settings)));
+    void RefreshProtection()
+    {
+        ProtectionStatus.Text = runtime.Parent.Required
+            ? "Защита включена. Настройки, пауза и выход требуют родительский пароль."
+            : "Пароль пока не задан. Любой пользователь может менять настройки и останавливать учёт.";
+        RemovePasswordButton.IsEnabled = runtime.Parent.Required;
+    }
+    void SetPasswordClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        if (!runtime.Parent.Request(this, "Изменить родительский пароль")) return;
+        if (NewParentPassword.Password != RepeatParentPassword.Password) throw new ArgumentException("Пароли не совпадают. Введите их заново.");
+        string hash = ParentPassword.Create(NewParentPassword.Password);
+        runtime.UpdateSettings(c => c with { ParentPasswordHash = hash });
+        NewParentPassword.Clear(); RepeatParentPassword.Clear(); RefreshProtection();
+        StatusText.Text = "Пароль сохранён. Закройте настройки, чтобы ограничить доступ к ним.";
+    });
+    void RemovePasswordClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        if (!runtime.Parent.Request(this, "Отключить защиту паролем")) return;
+        if (MessageBox.Show(this, "Без пароля ребёнок сможет поставить учёт на паузу и выйти. Отключить защиту?", "Родительский пароль",
+            MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+        runtime.UpdateSettings(c => c with { ParentPasswordHash = "" }); RefreshProtection();
+    });
     void Guard(Action action)
     {
         try { action(); }

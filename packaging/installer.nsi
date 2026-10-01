@@ -8,13 +8,13 @@ Unicode True
   !define PAYLOAD "..\artifacts\app"
 !endif
 !ifndef OUTPUT
-  !define OUTPUT "..\artifacts\FamilyTime-0.1.0-Setup.exe"
+  !define OUTPUT "..\artifacts\FamilyTime-0.1.2-Setup.exe"
 !endif
 !ifndef DELETE_LIST
   !define DELETE_LIST "..\artifacts\uninstall-files.nsh"
 !endif
 !ifndef APP_VERSION
-  !define APP_VERSION "0.1.0"
+  !define APP_VERSION "0.1.2"
 !endif
 
 Name "Family Time"
@@ -26,7 +26,7 @@ ManifestSupportedOS all
 SetCompressor /SOLID lzma
 SetCompressorDictSize 32
 BrandingText "Family Time ${APP_VERSION}"
-VIProductVersion "0.1.0.0"
+VIProductVersion "${APP_VERSION}.0"
 VIAddVersionKey /LANG=1049 "ProductName" "Family Time"
 VIAddVersionKey /LANG=1049 "FileDescription" "Установка Family Time"
 VIAddVersionKey /LANG=1049 "FileVersion" "${APP_VERSION}"

@@ -1,10 +1,11 @@
-<Window x:Class="FamilyTime.Windows.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Family Time" Width="1080" Height="780" MinWidth="880" MinHeight="620" WindowStartupLocation="CenterScreen" Icon="Assets/app.ico" Closing="OnClosing">
+<Window x:Class="FamilyTime.Windows.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:FamilyTime.Windows" Title="Family Time" Width="1080" Height="780" MinWidth="880" MinHeight="620" WindowStartupLocation="CenterScreen" Icon="Assets/app.ico" Closing="OnClosing">
   <Grid Margin="30,24">
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <DockPanel Margin="0,0,0,22">
       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
         <Button x:Name="PauseButton" Content="Пауза" Click="PauseClick"/>
         <Button Content="Настройки" Click="SettingsClick" Margin="0"/>
+        <local:HelpTip Text="Настройки доступны всегда, Telegram подключается там же. Крестик скрывает окно, но учёт продолжается. Открыть снова: ярлык Family Time или значок часов возле системных часов. Если задан пароль, настройки, пауза и полный выход доступны только родителю."/>
       </StackPanel>
       <StackPanel><TextBlock Text="Family Time" FontSize="27" FontWeight="SemiBold"/><TextBlock x:Name="ProfileText" Foreground="{StaticResource Muted}" Margin="0,4,0,0"/></StackPanel>
     </DockPanel>
@@ -12,7 +13,8 @@
       <DockPanel><TextBlock x:Name="LiveStatus" FontWeight="SemiBold"/><TextBlock x:Name="ConnectionText" DockPanel.Dock="Right" HorizontalAlignment="Right" Foreground="{StaticResource Muted}"/></DockPanel>
     </Border>
     <TabControl Grid.Row="2" Background="Transparent" BorderThickness="0">
-      <TabItem Header="Сегодня" Padding="18,10">
+      <TabItem Padding="12,10">
+        <TabItem.Header><StackPanel Orientation="Horizontal"><TextBlock Text="Сегодня" VerticalAlignment="Center"/><local:HelpTip Text="Общее активное время за день. Каждая секунда относится к одной программе или сайту. Фоновое видео показано отдельно и не увеличивает дневной расход повторно. Просмотр статистики доступен ребёнку."/></StackPanel></TabItem.Header>
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel Margin="0,18,0,4">
             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
@@ -36,14 +38,16 @@
           </StackPanel>
         </ScrollViewer>
       </TabItem>
-      <TabItem Header="История" Padding="18,10">
+      <TabItem Padding="12,10">
+        <TabItem.Header><StackPanel Orientation="Horizontal"><TextBlock Text="История" VerticalAlignment="Center"/><local:HelpTip Text="Выберите начальную и конечную даты, затем нажмите «Показать». В таблице — сумма времени по приложениям и сайтам за выбранный период, включая обе даты."/></StackPanel></TabItem.Header>
         <Grid Margin="0,18,0,0"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
           <StackPanel Orientation="Horizontal"><TextBlock Text="С" VerticalAlignment="Center" Margin="0,0,10,0"/><DatePicker x:Name="FromDate" Width="150"/><TextBlock Text="по" VerticalAlignment="Center" Margin="12,0"/><DatePicker x:Name="ToDate" Width="150"/><Button Content="Показать" Click="HistoryClick" Margin="14,0,0,0"/></StackPanel>
           <TextBlock Grid.Row="1" x:Name="HistorySummary" TextWrapping="Wrap" FontSize="19" Margin="0,20"/>
           <DataGrid Grid.Row="2" x:Name="HistoryGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#EDF1F8" RowHeight="42" Background="White" BorderBrush="#E5EAF2"><DataGrid.Columns><DataGridTextColumn Header="Приложение / сайт" Binding="{Binding Name}" Width="*"/><DataGridTextColumn Header="Категория" Binding="{Binding Category}" Width="180"/><DataGridTextColumn Header="Учтено" Binding="{Binding Duration}" Width="150"/></DataGrid.Columns></DataGrid>
         </Grid>
       </TabItem>
-      <TabItem Header="Категории" Padding="18,10">
+      <TabItem Padding="12,10">
+        <TabItem.Header><StackPanel Orientation="Horizontal"><TextBlock Text="Категории" VerticalAlignment="Center"/><local:HelpTip Text="Если программа определила категорию неверно, задайте правило. Для приложения укажите имя процесса, например RobloxPlayerBeta, для сайта — домен, например school.ru. Правило действует на новые интервалы. При включённой защите изменение требует пароль."/></StackPanel></TabItem.Header>
         <StackPanel Margin="0,20,0,0"><TextBlock Text="Уточните, к какой категории относится приложение или сайт." FontSize="18"/><TextBlock Text="Правило применяется к новым интервалам. Сохранённая история остаётся в прежних категориях." Foreground="{StaticResource Muted}" Margin="0,8,0,20" TextWrapping="Wrap"/>
           <StackPanel Orientation="Horizontal"><ComboBox x:Name="RuleKind" Width="150" SelectedIndex="0"><ComboBoxItem Content="Приложение"/><ComboBoxItem Content="Сайт"/></ComboBox><TextBox x:Name="RuleKey" Width="260" Margin="12,0" ToolTip="Имя процесса без .exe, например minecraft, или домен, например school.ru"/><ComboBox x:Name="RuleCategory" Width="150"/><Button Content="Сохранить правило" Click="SaveRuleClick" Margin="12,0,0,0"/></StackPanel>
           <TextBlock Text="Для приложения: имя процесса без .exe. Для сайта: только домен, например school.ru." Foreground="{StaticResource Muted}" FontSize="12" Margin="0,8,0,16"/>
@@ -51,12 +55,13 @@
           <Button Content="Удалить выбранное правило" Click="DeleteRuleClick" HorizontalAlignment="Left" Margin="0,14,0,0"/>
         </StackPanel>
       </TabItem>
-      <TabItem Header="О проекте" Padding="18,10">
+      <TabItem Padding="12,10">
+        <TabItem.Header><StackPanel Orientation="Horizontal"><TextBlock Text="О проекте" VerticalAlignment="Center"/><local:HelpTip Text="Здесь объясняется, что программа измеряет и какие у неё ограничения. Инструкция открывается из папки установленного приложения. Поддержка разработки добровольна."/></StackPanel></TabItem.Header>
         <StackPanel Margin="0,24,0,0" MaxWidth="760" HorizontalAlignment="Left"><TextBlock Text="Больше понимания. Меньше догадок." FontSize="27" FontWeight="SemiBold"/><TextBlock Text="Family Time показывает учтённое время в приложениях, играх и браузере. Дневной лимит напоминает о договорённости: учёт продолжается и после его достижения." TextWrapping="Wrap" Margin="0,18" FontSize="16"/>
           <TextBlock Text="История хранится на этом компьютере. В Telegram уходят только отчёты вашему боту. Приложение не записывает переписку, нажатия клавиш и содержимое экрана." TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,18"/>
           <TextBlock Text="Если компьютер выключен, спит или приложение закрыто, запрос Telegram не получит немедленного ответа. Состояние «простой» — оценка по отсутствию ввода; просмотр видео и игры с контроллером требуют проверки на вашем компьютере." TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,22"/>
           <StackPanel Orientation="Horizontal"><Button x:Name="SupportButton" Content="Поддержать разработку" Style="{StaticResource Primary}" Click="SupportClick" Visibility="Collapsed"/><Button x:Name="RepositoryButton" Content="Исходники на GitHub" Click="RepositoryClick" Visibility="Collapsed"/><Button Content="Открыть инструкцию" Click="DocsClick"/></StackPanel>
-          <TextBlock Text="Версия 0.1.1 • предварительная сборка • Windows 11 x64" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,26,0,0"/>
+          <TextBlock Text="Версия 0.1.2 • предварительная сборка • Windows 11 x64" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,26,0,0"/>
         </StackPanel>
       </TabItem>
     </TabControl>

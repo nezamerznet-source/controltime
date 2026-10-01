@@ -97,7 +97,7 @@ def package() -> None:
     installer = ARTIFACTS / f"FamilyTime-{VERSION}-Setup.exe"
     makensis = tool("makensis", "FAMILYTIME_MAKENSIS")
     flag = "/" if os.name == "nt" else "-"
-    run([makensis, flag + "V2", flag + "DPAYLOAD=" + str(APP), flag + "DOUTPUT=" + str(installer),
+    run([makensis, flag + "INPUTCHARSET", "UTF8", flag + "V2", flag + "DPAYLOAD=" + str(APP), flag + "DOUTPUT=" + str(installer),
          flag + "DDELETE_LIST=" + str(delete_list), flag + "DAPP_VERSION=" + VERSION, str(ROOT / "packaging/installer.nsi")])
 
     extension_zip = ARTIFACTS / f"FamilyTime-{VERSION}-Extension.zip"
@@ -137,6 +137,9 @@ def main() -> None:
             if log.exists(): print(log.read_text("utf-8"), file=sys.stderr)
             raise
     package()
+    if os.name == "nt":
+        run(["pwsh", "-NoProfile", "-File", str(ROOT / "packaging/check-installer.ps1"),
+             "-Installer", str(ARTIFACTS / f"FamilyTime-{VERSION}-Setup.exe")])
 
 
 if __name__ == "__main__":

@@ -9,15 +9,22 @@ public partial class MainWindow : Window
 {
     private readonly AppRuntime runtime;
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(2) };
+    private bool loadedOnce;
+    private SettingsWindow? settingsWindow;
     public bool AllowClose { get; set; }
+    public bool IsClosed { get; private set; }
+    internal SettingsWindow? OpenSettingsWindow => settingsWindow;
     public MainWindow(AppRuntime runtime)
     {
         InitializeComponent(); this.runtime = runtime;
         RuleCategory.ItemsSource = Categories.All; RuleCategory.SelectedIndex = 0;
         FromDate.SelectedDate = DateTime.Today.AddDays(-6); ToDate.SelectedDate = DateTime.Today;
         timer.Tick += (_, _) => { if (IsVisible) Refresh(); }; timer.Start();
+        Closed += (_, _) => { IsClosed = true; timer.Stop(); };
         Loaded += (_, _) =>
         {
+            if (loadedOnce) return;
+            loadedOnce = true;
             Refresh(); RefreshRules(); HistoryClick(this, new RoutedEventArgs());
             if (!runtime.Settings.SetupCompleted) Dispatcher.BeginInvoke(() => OpenSettings());
         };
@@ -53,10 +60,40 @@ public partial class MainWindow : Window
         }
         catch { FeedbackText.Text = "Не удалось обновить статистику. Проверьте доступ к папке данных."; }
     }
-    void OnClosing(object? sender, CancelEventArgs e) { if (!AllowClose) { e.Cancel = true; Hide(); } }
-    void PauseClick(object sender, RoutedEventArgs e) => Guard(() => { runtime.TogglePause(); Refresh(); });
+    void OnClosing(object? sender, CancelEventArgs e)
+    {
+        if (!AllowClose)
+        {
+            e.Cancel = true;
+            settingsWindow?.Close();
+            // Defer hiding until WPF has finished processing the cancelled Close.
+            Dispatcher.BeginInvoke(() => { if (!AllowClose) Hide(); });
+        }
+    }
+    internal void Restore()
+    {
+        ShowInTaskbar = true;
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        Show(); Activate();
+        if (settingsWindow?.IsVisible == true)
+        {
+            settingsWindow.WindowState = WindowState.Normal; settingsWindow.Activate();
+        }
+    }
+    void PauseClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        if (!runtime.Parent.Request(this, "Изменить состояние учёта")) return;
+        runtime.TogglePause(); Refresh();
+    });
     void SettingsClick(object sender, RoutedEventArgs e) => OpenSettings();
-    void OpenSettings() { new SettingsWindow(runtime) { Owner = this }.ShowDialog(); Refresh(); RefreshRules(); }
+    internal void OpenSettings()
+    {
+        if (settingsWindow is not null) { settingsWindow.WindowState = WindowState.Normal; settingsWindow.Activate(); return; }
+        if (!runtime.Parent.Request(this, "Открыть родительские настройки")) return;
+        settingsWindow = new SettingsWindow(runtime) { Owner = this };
+        settingsWindow.Closed += (_, _) => { settingsWindow = null; Refresh(); RefreshRules(); if (IsVisible) Activate(); };
+        settingsWindow.Show();
+    }
     void SendClick(object sender, RoutedEventArgs e) => Guard(() => { runtime.SendCurrentReport(); FeedbackText.Text = "Отчёт поставлен в очередь Telegram."; });
     void CopyClick(object sender, RoutedEventArgs e) => Guard(() => { Clipboard.SetText(runtime.CurrentReport(false)); FeedbackText.Text = "Отчёт скопирован."; });
     void HistoryClick(object sender, RoutedEventArgs e) => Guard(() =>
@@ -70,6 +107,7 @@ public partial class MainWindow : Window
     void RefreshRules() => RulesGrid.ItemsSource = runtime.Settings.CategoryRules.OrderBy(p => p.Key).ToArray();
     void SaveRuleClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
+        if (!runtime.Parent.Request(this, "Изменить категорию приложения или сайта")) return;
         string key = RuleKey.Text.Trim().ToLowerInvariant();
         if (RuleKind.SelectedIndex == 1) key = Categories.DomainOnly(key);
         else if (key.EndsWith(".exe")) key = key[..^4];
@@ -80,6 +118,7 @@ public partial class MainWindow : Window
     });
     void DeleteRuleClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
+        if (!runtime.Parent.Request(this, "Удалить правило категории")) return;
         if (RulesGrid.SelectedItem is not KeyValuePair<string, string> row) return;
         var rules = new Dictionary<string, string>(runtime.Settings.CategoryRules); rules.Remove(row.Key);
         runtime.UpdateSettings(c => c with { CategoryRules = rules }); RefreshRules();

@@ -2,7 +2,7 @@ name: Windows build
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, fix/parent-controls-0.1.2]
   pull_request:
 
 permissions:
@@ -39,6 +39,16 @@ jobs:
             artifacts/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
+      - name: Preserve Windows UI previews and checks
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: FamilyTime-ui-checks
+          path: |
+            artifacts/ui-checks/*
+            artifacts/app/startup-check.txt
+          if-no-files-found: ignore
+          retention-days: 14
 
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -58,4 +68,4 @@ jobs:
           RELEASE_COMMIT: ${{ github.sha }}
         shell: bash
         run: |
-          gh release create v0.1.1 artifacts/* --target "$RELEASE_COMMIT" --prerelease --title "Family Time 0.1.1 — startup fix" --notes "Fixes a missing WPF icon resource that prevents the main window from opening. Adds startup error details and a local diagnostic log. The build now loads both Windows UI windows and initializes its database before packaging. Install over 0.1.0; existing family data is preserved. Full interactive monitoring and Telegram acceptance testing are still required on a family PC."
+          gh release create v0.1.2 artifacts/* --target "$RELEASE_COMMIT" --prerelease --title "Family Time 0.1.2 — settings and parent password" --notes "Fixes installer Russian text encoding. Keeps settings open after saving, restores the dashboard from the tray or shortcut, and adds a parent password for settings, pause and exit. Adds Russian question-mark help throughout the interface. Windows checks cover first-run save, accounting, hiding/reopening, and password persistence. Password protection is application-level: it does not prevent Task Manager termination or administrator changes. Install over the previous version; family settings and history are preserved."

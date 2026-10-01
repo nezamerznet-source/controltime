@@ -55,6 +55,7 @@ public sealed record AppSettings
     public int HistoryDays { get; init; } = 90;
     public int SummaryDays { get; init; } = 365;
     public bool AutoStart { get; init; } = true;
+    public string ParentPasswordHash { get; init; } = "";
     public long ParentChatId { get; init; }
     public long ParentUserId { get; init; }
     public string ProtectedToken { get; init; } = "";
