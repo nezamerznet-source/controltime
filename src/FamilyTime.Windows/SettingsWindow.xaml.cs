@@ -25,6 +25,7 @@ public partial class SettingsWindow : Window
         Heading.Text = c.SetupCompleted ? "Настройки семьи" : "Добро пожаловать в Family Time";
         SaveButton.Content = c.SetupCompleted ? "Сохранить" : "Сохранить и начать учёт";
         AccountText.Text = "Учётная запись Windows: " + Environment.UserName;
+        CloudUrlBox.Text = c.CloudUrl;
         ProfileBox.Text = c.ProfileName; AutoStartBox.IsChecked = c.AutoStart; LimitEnabledBox.IsChecked = c.LimitEnabled;
         LimitBox.Text = c.LimitMinutes.ToString(); WarningBox.Text = c.WarningMinutes.ToString();
         IdleBox.Text = c.IdleMinutes.ToString(); SessionBox.Text = c.SessionMinutes.ToString();
@@ -61,6 +62,10 @@ public partial class SettingsWindow : Window
         try
         {
             var c = runtime.Settings;
+            CloudStatusText.Text = runtime.CloudStatus;
+            CloudConnectButton.IsEnabled = !busy && !c.CloudLinked;
+            CloudDisconnectButton.IsEnabled = !busy && (c.CloudLinked || c.ProtectedCloudToken.Length > 0);
+            CloudUrlBox.IsEnabled = CloudCodeBox.IsEnabled = !busy && !c.CloudLinked;
             ExtensionStatus.Text = runtime.Browsers.Connected(DateTimeOffset.UtcNow) ? "Расширение подключено, данные поступают." : "Связи пока нет. Откройте браузер с установленным расширением.";
             TelegramStatus.Text = (c.ParentChatId != 0 ? $"Родитель привязан · @{c.BotUsername}\n" : "") + runtime.Telegram.Status;
             if (c.ParentChatId != 0) { PairPanel.Visibility = Visibility.Collapsed; PairLink.Text = ""; }
@@ -103,10 +108,28 @@ public partial class SettingsWindow : Window
     void DataFolderClick(object sender, RoutedEventArgs e) => Guard(() => WindowsIntegration.OpenFolder(WindowsIntegration.DataDirectory));
     void ClearClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
-        if (MessageBox.Show("Удалить все интервалы, дневные итоги и очередь сообщений? Сегодняшний расход лимита обнулится. Настройки и привязка родителя сохранятся. Действие необратимо.", "Удаление истории", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+        if (MessageBox.Show("Удалить локальные интервалы, дневные итоги и очередь сообщений? Сегодняшний расход лимита обнулится, в том числе в кабинете после синхронизации. Более ранняя облачная история сохранится; удалить её можно в кабинете вместе с компьютером. Настройки и привязка родителя сохранятся. Действие необратимо.", "Удаление истории", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
         runtime.ClearHistory(); StatusText.Text = "История и очередь удалены.";
     });
     void DonateClick(object sender, RoutedEventArgs e) => Guard(() => WindowsIntegration.OpenHttps(Branding.Support(runtime.Settings)));
+    async void CloudConnectClick(object sender, RoutedEventArgs e)
+    {
+        if (busy) return; busy = true; RefreshStatus();
+        try
+        {
+            Save(); StatusText.Text = "Подключаем личный кабинет…";
+            await runtime.ConnectCloud(CloudUrlBox.Text, CloudCodeBox.Text);
+            CloudCodeBox.Clear(); StatusText.Text = "Компьютер подключён. Данные появятся в кабинете после синхронизации.";
+        }
+        catch (Exception ex) { StatusText.Text = ex is CloudError or ArgumentException ? ex.Message : "Не удалось подключить кабинет. Проверьте адрес, код и доступ к интернету."; }
+        finally { busy = false; RefreshStatus(); }
+    }
+    void CloudOpenClick(object sender, RoutedEventArgs e) => Guard(() => WindowsIntegration.OpenHttps(CloudEndpoint.Normalize(CloudUrlBox.Text)));
+    void CloudDisconnectClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        if (MessageBox.Show("Отключить отправку? Уже загруженная история в кабинете останется. Для её удаления откройте раздел «Компьютеры» в кабинете.", "Личный кабинет", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        runtime.DisconnectCloud(); CloudCodeBox.Clear(); RefreshStatus();
+    });
     void RefreshProtection()
     {
         ProtectionStatus.Text = runtime.Parent.Required

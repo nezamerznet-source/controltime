@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Net;
+using System.Net.Http;
 using FamilyTime.Core;
 
 var cases = new List<(string Name, Action Run)>();
@@ -259,6 +261,77 @@ Test("historical and session reports never present subtotal as today's remaining
     True(Reports.Render(Summary(120), config, epoch, "сегодня").Contains("Осталось: 1 ч 58 мин"));
 });
 
+Test("cloud queue coalesces observations and late acknowledgements preserve new accounting", () =>
+{
+    using var s = new ActivityStore(":memory:");
+    s.Append([Slice(0, 60)], TimeZoneInfo.Utc);
+    var first = s.NextCloudDay(config, epoch)!; Near(60, first.ActiveSeconds);
+    s.Append([Slice(60, 90)], TimeZoneInfo.Utc);
+    s.AcknowledgeCloud(new(first.Day, first.Revision)); Equal(1, s.CloudPendingDays());
+    var next = s.NextCloudDay(config, epoch)!; True(next.Revision > first.Revision); Near(90, next.ActiveSeconds);
+    s.AcknowledgeCloud(new(next.Day, next.Revision)); Equal(0, s.CloudPendingDays());
+});
+Test("cloud session activity excludes idle and background without losing app totals", () =>
+{
+    var sessions = ActivityStore.CloudSessions([Slice(0,60), Slice(60,120, ActivityKind.Idle), Slice(0,120,bg:true), Slice(120,180,app:"chrome",domain:"youtube.com"), Slice(1200,1260)], 15);
+    Equal(2, sessions.Count); Near(120, sessions[0].ActiveSeconds); Near(120, sessions[0].Activities.Sum(a => a.Seconds));
+    Equal(epoch, sessions[0].Start); Equal(epoch.AddSeconds(180), sessions[0].End);
+});
+Test("cloud backlog persists and old days cannot be starved by today's observations", () =>
+{
+    var path = Path.Combine(Path.GetTempPath(), "familytime-cloud-" + Guid.NewGuid().ToString("N") + ".db");
+    try
+    {
+        using (var s = new ActivityStore(path)) { s.Append([Slice(0,60)], TimeZoneInfo.Utc); s.QueueCloudHistory(today.AddDays(1)); }
+        using var reopened = new ActivityStore(path);
+        Equal(2, reopened.CloudPendingDays());
+        Equal(today.AddDays(1).ToString("yyyy-MM-dd"), reopened.NextCloudDay(config, epoch.AddDays(1))!.Day);
+        Equal(today.ToString("yyyy-MM-dd"), reopened.NextCloudDay(config, epoch.AddDays(1), false)!.Day);
+        True(reopened.NextCloudDay(config, epoch.AddDays(100))!.Sessions is null);
+    }
+    finally { File.Delete(path); }
+});
+Test("clearing local history keeps cloud credentials and sends a newer zero snapshot", () =>
+{
+    using var s = new ActivityStore(":memory:"); var now = DateTimeOffset.UtcNow;
+    s.SaveSettings(config with { CloudLinked = true, CloudDeviceId = "device", ProtectedCloudToken = "encrypted" });
+    s.QueueCloudHistory(Format.Day(now, TimeZoneInfo.Utc)); var before = s.NextCloudDay(config, now)!;
+    s.ClearHistory(); var after = s.NextCloudDay(config, now)!;
+    True(after.Revision > before.Revision); Near(0, after.ActiveSeconds); Equal("encrypted", s.LoadSettings().ProtectedCloudToken);
+});
+Test("cloud endpoint rejects insecure, local and non-root destinations", () =>
+{
+    Equal("https://family.example.com", CloudEndpoint.Normalize("https://family.example.com/"));
+    foreach (var value in new[] { "http://example.com", "https://127.0.0.1", "https://localhost", "https://user:pass@example.com", "https://example.com/path", "https://example.com?token=x" })
+    { bool rejected = false; try { CloudEndpoint.Normalize(value); } catch (ArgumentException) { rejected = true; } True(rejected); }
+});
+
+Test("cloud HTTP protocol confirms exact revisions and reports revoked and offline errors", () =>
+{
+    using var store = new ActivityStore(":memory:"); store.Append([Slice(0,60)], TimeZoneInfo.Utc);
+    var day = store.NextCloudDay(config, epoch)!;
+    var meta = new CloudMetadata("Мирон", "UTC", 120, true, false, epoch, false, 90, 365);
+    using var good = new HttpClient(new CloudHandler(async request =>
+    {
+        Equal("https://family.example.com/api/device/sync", request.RequestUri!.ToString());
+        Equal("Bearer", request.Headers.Authorization!.Scheme); Equal(new string('x',43), request.Headers.Authorization.Parameter);
+        using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+        Equal(1, body.RootElement.GetProperty("protocol").GetInt32()); Equal(1, body.RootElement.GetProperty("days").GetArrayLength());
+        True(!body.RootElement.GetProperty("metadata").TryGetProperty("protectedToken", out _));
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(new CloudSyncResponse([new(day.Day,day.Revision)]), Wire.Json)) };
+    }));
+    var result = new CloudClient(good).Sync("https://family.example.com", new string('x',43), meta, day, CancellationToken.None).GetAwaiter().GetResult();
+    Equal(day.Revision, result.Accepted.Single().Revision);
+    using var revoked = new HttpClient(new CloudHandler(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized))));
+    bool rejected = false;
+    try { new CloudClient(revoked).Sync("https://family.example.com", new string('x',43), meta, day, CancellationToken.None).GetAwaiter().GetResult(); }
+    catch (CloudError ex) { rejected = ex.Revoked; } True(rejected); Equal(1, store.CloudPendingDays());
+    using var offline = new HttpClient(new CloudHandler(_ => throw new HttpRequestException("offline")));
+    bool queued = false;
+    try { new CloudClient(offline).Sync("https://family.example.com", new string('x',43), meta, day, CancellationToken.None).GetAwaiter().GetResult(); }
+    catch (CloudError ex) { queued = !ex.Revoked; } True(queued); Equal(1, store.CloudPendingDays());
+});
+
 int failed = 0;
 foreach (var item in cases)
 {
@@ -273,4 +346,9 @@ sealed class FakeApi : ITelegramApi
     public Task<JsonElement[]> Poll(string token, long offset, CancellationToken ct) => Task.FromResult(Array.Empty<JsonElement>());
     public Task<long> Send(string token, long chat, string body, bool keyboard, CancellationToken ct) => Task.FromResult(1L);
     public Task<string> Username(string token, CancellationToken ct) => Task.FromResult("test_bot");
+}
+
+sealed class CloudHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> respond) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => respond(request);
 }

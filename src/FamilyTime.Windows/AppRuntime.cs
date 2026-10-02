@@ -3,7 +3,7 @@ using System.Net.Http;
 
 namespace FamilyTime.Windows;
 
-public sealed class AppRuntime : IDisposable
+public sealed partial class AppRuntime : IDisposable
 {
     public readonly ActivityStore Store;
     public readonly BrowserRegistry Browsers = new();
@@ -43,7 +43,7 @@ public sealed class AppRuntime : IDisposable
     }
     public void Start()
     {
-        tasks = Task.WhenAll(Task.Run(Loop), Task.Run(() => new BrowserPipe(Browsers).Run(cancellation.Token)), Task.Run(() => Telegram.Run(cancellation.Token)));
+        tasks = Task.WhenAll(Task.Run(Loop), Task.Run(() => new BrowserPipe(Browsers).Run(cancellation.Token)), Task.Run(() => Telegram.Run(cancellation.Token)), Task.Run(CloudLoop));
     }
     private void Boundary() { try { Tick(); } catch { Error = "Не удалось сохранить изменение состояния Windows."; } }
     public void Tick()
@@ -226,6 +226,6 @@ public sealed class AppRuntime : IDisposable
         try { Tick(); } catch { }
         cancellation.Cancel();
         try { tasks?.Wait(TimeSpan.FromSeconds(5)); } catch { }
-        probe.Dispose(); http.Dispose(); Store.Dispose(); cancellation.Dispose();
+        probe.Dispose(); http.Dispose(); cloudHttp.Dispose(); Store.Dispose(); cancellation.Dispose();
     }
 }

@@ -2,13 +2,38 @@ name: Windows build
 on:
   workflow_dispatch:
   push:
-    branches: [main, fix/parent-controls-0.1.2]
+    branches: [main, feat/cloud-dashboard]
   pull_request:
 
 permissions:
   contents: read
 
 jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: FamilyTime-web-checks
+          path: web/test-results
+          if-no-files-found: ignore
+          retention-days: 14
   build:
     runs-on: windows-2025
     timeout-minutes: 25
@@ -52,7 +77,7 @@ jobs:
 
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: build
+    needs: [build, web]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -68,4 +93,8 @@ jobs:
           RELEASE_COMMIT: ${{ github.sha }}
         shell: bash
         run: |
-          gh release create v0.1.2 artifacts/* --target "$RELEASE_COMMIT" --prerelease --title "Family Time 0.1.2 — settings and parent password" --notes "Fixes installer Russian text encoding. Keeps settings open after saving, restores the dashboard from the tray or shortcut, and adds a parent password for settings, pause and exit. Adds Russian question-mark help throughout the interface. Windows checks cover first-run save, accounting, hiding/reopening, and password persistence. Password protection is application-level: it does not prevent Task Manager termination or administrator changes. Install over the previous version; family settings and history are preserved."
+          if gh release view v0.2.0 >/dev/null 2>&1; then
+            echo "v0.2.0 already exists; keeping its verified assets unchanged."
+          else
+            gh release create v0.2.0 artifacts/* --target "$RELEASE_COMMIT" --prerelease --title "Family Time 0.2.0 — личный кабинет" --notes "Adds optional cloud dashboard pairing in Settings → Личный кабинет. A separately deployed web account provides desktop/mobile charts, daily history and sessions. Offline observations are queued locally and synced automatically; retries do not duplicate time. Telegram is optional. The web account requires Vercel and Supabase setup; see docs/CLOUD.md. Based on v0.1.2, without shutdown reports. Install over v0.1.2 to preserve settings and local history."
+          fi

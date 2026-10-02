@@ -10,3 +10,10 @@ artifacts/
 *.pem
 *.log
 .env*
+!**/.env.example
+**/node_modules/
+**/.next/
+**/.vercel/
+**/playwright-report/
+**/test-results/
+*.tsbuildinfo

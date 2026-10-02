@@ -56,6 +56,10 @@ public sealed record AppSettings
     public int SummaryDays { get; init; } = 365;
     public bool AutoStart { get; init; } = true;
     public string ParentPasswordHash { get; init; } = "";
+    public string CloudUrl { get; init; } = "";
+    public string CloudDeviceId { get; init; } = "";
+    public string ProtectedCloudToken { get; init; } = "";
+    public bool CloudLinked { get; init; }
     public long ParentChatId { get; init; }
     public long ParentUserId { get; init; }
     public string ProtectedToken { get; init; } = "";

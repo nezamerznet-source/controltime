@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace FamilyTime.Core;
 
-public sealed class ActivityStore : IDisposable
+public sealed partial class ActivityStore : IDisposable
 {
     private readonly object gate = new();
     private readonly Sqlite db;
@@ -19,6 +19,7 @@ public sealed class ActivityStore : IDisposable
         db.Run("CREATE TABLE IF NOT EXISTS alerts (id TEXT PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL, local_state TEXT NOT NULL DEFAULT 'pending', created REAL NOT NULL)");
         db.Run("CREATE TABLE IF NOT EXISTS inbox (generation INTEGER NOT NULL, update_id INTEGER NOT NULL, PRIMARY KEY(generation,update_id))");
         db.Run("CREATE TABLE IF NOT EXISTS limit_history (revision INTEGER PRIMARY KEY, changed TEXT NOT NULL, minutes INTEGER NOT NULL, enabled INTEGER NOT NULL, warning INTEGER NOT NULL)");
+        db.Run("CREATE TABLE IF NOT EXISTS cloud_dirty_days (day TEXT PRIMARY KEY, revision INTEGER NOT NULL)");
         SetMeta("schema", "1");
     }
     static double Num(string value) => double.Parse(value, CultureInfo.InvariantCulture);
@@ -78,6 +79,7 @@ public sealed class ActivityStore : IDisposable
                         start, end, s.Kind.ToString(), s.AppKey, s.AppName, s.Domain, s.Category, s.Background);
                     db.Run("INSERT INTO daily(day,kind,app,name,domain,category,background,seconds) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(day,kind,app,name,domain,category,background) DO UPDATE SET seconds=seconds+excluded.seconds",
                         Day(Format.Day(s.Start, zone)), s.Kind.ToString(), s.AppKey, s.AppName, s.Domain, s.Category, s.Background, s.Seconds);
+                    MarkCloudDirty(Format.Day(s.Start, zone));
                 }
             }
         });
@@ -202,6 +204,7 @@ public sealed class ActivityStore : IDisposable
         {
             db.Run("DELETE FROM segments WHERE finish<?", Epoch(now.AddDays(-c.HistoryDays)));
             db.Run("DELETE FROM daily WHERE day<?", Day(Format.Day(now, c.Zone).AddDays(-c.SummaryDays)));
+            db.Run("DELETE FROM cloud_dirty_days WHERE day<?", Day(Format.Day(now, c.Zone).AddDays(-c.SummaryDays)));
             db.Run("DELETE FROM alerts WHERE created<?", Epoch(now.AddDays(-c.SummaryDays)));
             db.Run("DELETE FROM outbox WHERE status IN ('sent','cancelled') AND created<?", Epoch(now.AddDays(-30)));
         });
@@ -212,6 +215,8 @@ public sealed class ActivityStore : IDisposable
         {
             db.Run("DELETE FROM segments"); db.Run("DELETE FROM daily"); db.Run("DELETE FROM alerts");
             db.Run("DELETE FROM outbox");
+            db.Run("DELETE FROM cloud_dirty_days");
+            MarkCloudDirty(Format.Day(DateTimeOffset.UtcNow, LoadSettings().Zone));
             db.Run("DELETE FROM meta WHERE key IN ('session-start','session-last','daily-cursor','last-observation')");
         });
     }

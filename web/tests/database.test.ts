@@ -1,0 +1,45 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { PGlite } from '@electric-sql/pglite';
+test('database enforces family isolation, one-time pairing and idempotent snapshots',async()=>{
+  const db=new PGlite();
+  const owner='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',device='33333333-3333-4333-8333-333333333333';
+  try{
+    await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;
+      create schema auth;create table auth.users(id uuid primary key);
+      create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('app.uid',true),'')::uuid $$;
+      grant usage on schema auth,public to anon,authenticated,service_role;grant execute on function auth.uid() to authenticated;`);
+    await db.exec(await readFile(new URL('../supabase/migrations/001_familytime.sql',import.meta.url),'utf8'));
+    await db.query('insert into auth.users values ($1),($2)',[owner,other]);
+    await db.query("insert into pairing_codes(owner_id,code_hash,expires_at) values($1,$2,now()+interval '10 minutes'),($1,$3,now()-interval '1 minute')",[owner,'a'.repeat(64),'e'.repeat(64)]);
+    await db.exec('set role service_role');
+    await assert.rejects(db.query('select claim_family_device($1,$2,$3,$4)',['e'.repeat(64),device,'b'.repeat(64),'PC']),/invalid_code/);
+    await db.query('select claim_family_device($1,$2,$3,$4)',['a'.repeat(64),device,'b'.repeat(64),'PC']);
+    await db.query('select claim_family_device($1,$2,$3,$4)',['a'.repeat(64),device,'b'.repeat(64),'PC']);
+    await assert.rejects(db.query('select claim_family_device($1,$2,$3,$4)',['a'.repeat(64),other,'c'.repeat(64),'PC']),/used_code/);
+    const date=new Date().toISOString().slice(0,10);const metadata={timeZone:'UTC',summaryDays:365};
+    const snapshot={day:date,revision:2,activeSeconds:60,sessions:[{activeSeconds:60}]};
+    const sync=async(value:unknown,token='b'.repeat(64))=>db.query('select sync_family_device($1,$2,$3)',[token,JSON.stringify(metadata),JSON.stringify([value])]);
+    await sync(snapshot);await sync(snapshot);await sync({...snapshot,revision:1,activeSeconds:999});
+    const stored=await db.query<{revision:number;payload:typeof snapshot}>('select revision,payload from daily_snapshots');
+    assert.equal(stored.rows.length,1);assert.equal(stored.rows[0].payload.activeSeconds,60);
+    await sync({...snapshot,revision:3,sessions:null});
+    assert.deepEqual((await db.query<{payload:typeof snapshot}>('select payload from daily_snapshots')).rows[0].payload.sessions,snapshot.sessions);
+    await assert.rejects(sync(snapshot,'f'.repeat(64)),/device_revoked/);
+    const allowed=async()=> (await db.query<{consume_request_limit:boolean}>("select consume_request_limit('test',2,60)")).rows[0].consume_request_limit;
+    assert.equal(await allowed(),true);assert.equal(await allowed(),true);assert.equal(await allowed(),false);
+    await db.exec('reset role; set role authenticated;');await db.query("select set_config('app.uid',$1,false)",[owner]);
+    assert.equal((await db.query('select * from devices')).rows.length,1);assert.equal((await db.query('select * from daily_snapshots')).rows.length,1);
+    await assert.rejects(db.query('select * from device_secrets'),/permission denied/);
+    await assert.rejects(db.query('select * from pairing_codes'),/permission denied/);
+    await assert.rejects(db.query('select sync_family_device($1,$2,$3)',['b'.repeat(64),'{}','[]']),/permission denied/);
+    await db.query("select set_config('app.uid',$1,false)",[other]);
+    assert.equal((await db.query('select * from devices')).rows.length,0);assert.equal((await db.query('select * from daily_snapshots')).rows.length,0);
+    await assert.rejects(db.query('delete from devices'),/permission denied/);
+    await db.exec('reset role;set role anon;');await assert.rejects(db.query('select * from devices'),/permission denied/);
+    await db.exec('reset role;set role service_role;');await db.query('delete from devices where id=$1',[device]);
+    assert.equal((await db.query('select * from device_secrets')).rows.length,0);assert.equal((await db.query('select * from daily_snapshots')).rows.length,0);
+    await assert.rejects(sync(snapshot),/device_revoked/);
+  }finally{await db.close();}
+});

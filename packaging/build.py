@@ -103,8 +103,8 @@ def package() -> None:
     extension_zip = ARTIFACTS / f"FamilyTime-{VERSION}-Extension.zip"
     archive(extension_zip, [p for p in (APP / "extension").rglob("*") if p.is_file()], APP / "extension")
     source_files: list[Path] = []
-    for directory in ["src", "tests", "extension", "packaging", "docs", ".github"]:
-        source_files += [p for p in (ROOT / directory).rglob("*") if p.is_file() and not any(x in {"bin", "obj", "__pycache__"} for x in p.relative_to(ROOT).parts)]
+    for directory in ["src", "tests", "extension", "packaging", "docs", ".github", "web"]:
+        source_files += [p for p in (ROOT / directory).rglob("*") if p.is_file() and not any(x in {"bin", "obj", "__pycache__", "node_modules", ".next", ".vercel", "test-results", "playwright-report"} for x in p.relative_to(ROOT).parts) and not p.name.endswith(".tsbuildinfo") and (not p.name.startswith(".env") or p.name == ".env.example")]
     source_files += [p for p in ROOT.iterdir() if p.is_file() and (p.suffix in {".md", ".json", ".props", ".slnx"} or p.name in {".gitignore", ".gitattributes", ".editorconfig"})]
     source_zip = ARTIFACTS / f"FamilyTime-{VERSION}-Source.zip"
     archive(source_zip, source_files, ROOT, "family-time/")
