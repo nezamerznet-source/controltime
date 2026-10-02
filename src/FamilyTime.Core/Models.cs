@@ -49,6 +49,7 @@ public sealed record AppSettings
     public int LimitRevision { get; init; } = 1;
     public bool DailyReport { get; init; } = true;
     public bool SessionReport { get; init; } = true;
+    public bool ShutdownReport { get; init; } = true;
     public bool WeeklyReport { get; init; }
     public bool EveningReport { get; init; }
     public int EveningHour { get; init; } = 21;

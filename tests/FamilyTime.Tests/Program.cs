@@ -259,6 +259,96 @@ Test("historical and session reports never present subtotal as today's remaining
     True(Reports.Render(Summary(120), config, epoch, "сегодня").Contains("Осталось: 1 ч 58 мин"));
 });
 
+Test("shutdown preference survives upgrades and disabling; no report without setup or parent", () =>
+{
+    var legacy = JsonSerializer.Deserialize<AppSettings>("{\"setupCompleted\":true}", Wire.Json)!;
+    True(legacy.ShutdownReport);
+    using var s = new ActivityStore(":memory:");
+    s.SaveSettings(config with { ShutdownReport = false }); True(!s.LoadSettings().ShutdownReport);
+    True(SessionEndReport.Enqueue(s, s.LoadSettings(), epoch, false, "disabled") is null);
+    True(SessionEndReport.Enqueue(s, config with { ParentChatId = 0 }, epoch, false, "unpaired") is null);
+    True(SessionEndReport.Enqueue(s, config with { SetupCompleted = false }, epoch, false, "setup") is null);
+    Equal(0, s.QueueCounts().Pending);
+});
+Test("shutdown snapshot totals the local day and deduplicates one event, not the entire day", () =>
+{
+    using var s = new ActivityStore(":memory:");
+    s.Append([Slice(0, 60), Slice(60, 180, app: "chrome", domain: "youtube.com", category: "Видео")], TimeZoneInfo.Utc);
+    string id = SessionEndReport.Enqueue(s, config, epoch.AddMinutes(3), false, "one")!;
+    SessionEndReport.Enqueue(s, config, epoch.AddMinutes(4), false, "one");
+    Equal(1, s.QueueCounts().Pending);
+    var body = s.NextOutgoing(epoch.AddHours(1), id)!.Body;
+    True(body.Contains("Учтено: 3 мин")); True(body.Contains("Игры: 1 мин")); True(body.Contains("youtube.com — 2 мин"));
+    True(body.Contains("28.09.2026 12:03")); True(body.Contains("выключение или перезагрузку"));
+    True(!body.Contains("компьютер выключен")); // Never claim a confirmed powered-off state.
+    s.MarkSent(id, 1); SessionEndReport.Enqueue(s, config, epoch.AddMinutes(4), false, "one");
+    Equal(0, s.QueueCounts().Pending);
+    string second = SessionEndReport.Enqueue(s, config, epoch.AddMinutes(5), true, "two")!;
+    True(s.NextOutgoing(epoch.AddHours(1), second)!.Body.Contains("выход из учётной записи"));
+    Equal(1, s.QueueCounts().Pending);
+    var zero = config with { TimeZoneId = "Tokyo Standard Time" };
+    string nextDay = SessionEndReport.Enqueue(s, zero, epoch.AddHours(4), false, "next-day")!;
+    var midnightBody = s.NextOutgoing(epoch.AddDays(1), nextDay)!.Body;
+    True(midnightBody.Contains("29.09.2026")); True(midnightBody.Contains("Учтено: 0 мин"));
+});
+Test("shutdown delivery is serialized with the ordinary sender and takes priority over backlog", () =>
+{
+    using var s = new ActivityStore(":memory:");
+    var at = DateTimeOffset.UtcNow.AddMinutes(-10);
+    s.Enqueue("old", 101, 1, "old report", "daily", at.AddDays(-1));
+    string id = SessionEndReport.Enqueue(s, config, at, false, "priority")!;
+    Equal(id, s.NextOutgoing(DateTimeOffset.UtcNow)!.Id);
+    var api = new FakeApi { Sender = async ct => { await Task.Delay(30, ct); return 123; } };
+    var w = new TelegramWorker(s, api, () => config, () => "fake", _ => "", (_, _, _) => false);
+    Task.WhenAll(w.SendPending(CancellationToken.None), w.SendPending(CancellationToken.None, id)).GetAwaiter().GetResult();
+    Equal(1, api.Bodies.Count); True(api.Bodies[0].Contains("Отправлено с задержкой"));
+    Equal("old", s.NextOutgoing(DateTimeOffset.UtcNow)!.Id);
+});
+Test("shutdown timeout leaves a snapshot on disk for the next launch", () =>
+{
+    string path = Path.Combine(Path.GetTempPath(), "familytime-shutdown-" + Guid.NewGuid() + ".db");
+    try
+    {
+        string id;
+        var at = DateTimeOffset.UtcNow.AddMinutes(-10);
+        using (var s = new ActivityStore(path))
+        {
+            s.SaveSettings(config); id = SessionEndReport.Enqueue(s, config, at, false, "timeout")!;
+            var api = new FakeApi { Sender = async ct => { await Task.Delay(Timeout.Infinite, ct); return 1; } };
+            var w = new TelegramWorker(s, api, () => config, () => "fake", _ => "", (_, _, _) => false);
+            using var deadline = new CancellationTokenSource(100);
+            bool cancelled = false;
+            try { w.SendPending(deadline.Token, id).GetAwaiter().GetResult(); }
+            catch (OperationCanceledException) { cancelled = true; }
+            True(cancelled); Equal(1, s.QueueCounts().Pending);
+        }
+        using (var s = new ActivityStore(path))
+        {
+            var api = new FakeApi();
+            var w = new TelegramWorker(s, api, s.LoadSettings, () => "fake", _ => "", (_, _, _) => false);
+            True(w.SendPending(CancellationToken.None, id).GetAwaiter().GetResult());
+            Equal(0, s.QueueCounts().Pending); True(api.Bodies.Single().Contains(Format.Stamp(at, config.Zone)));
+            True(!w.SendPending(CancellationToken.None, id).GetAwaiter().GetResult());
+        }
+    }
+    finally { foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
+});
+Test("shutdown network errors and rate limits remain queued; unlinked recipients never receive them", () =>
+{
+    using var s = new ActivityStore(":memory:");
+    var at = DateTimeOffset.UtcNow.AddMinutes(-10);
+    string id = SessionEndReport.Enqueue(s, config, at, false, "network")!;
+    var api = new FakeApi { Sender = _ => throw new TelegramError("offline", retryAfter: 60) };
+    var w = new TelegramWorker(s, api, () => config, () => "fake", _ => "", (_, _, _) => false);
+    True(!w.SendPending(CancellationToken.None, id).GetAwaiter().GetResult());
+    Equal(1, s.QueueCounts().Pending); True(s.NextOutgoing(DateTimeOffset.UtcNow, id) is null);
+    True(!w.SendPending(CancellationToken.None, id).GetAwaiter().GetResult()); Equal(1, api.Bodies.Count);
+    s.Retry(id, at, false);
+    var unlinked = new TelegramWorker(s, api, () => config with { TelegramGeneration = 2 }, () => "fake", _ => "", (_, _, _) => false);
+    True(!unlinked.SendPending(CancellationToken.None, id).GetAwaiter().GetResult());
+    Equal(1, api.Bodies.Count); Equal(1, s.QueueCounts().Errors);
+});
+
 int failed = 0;
 foreach (var item in cases)
 {
@@ -270,7 +360,13 @@ return failed == 0 ? 0 : 1;
 
 sealed class FakeApi : ITelegramApi
 {
+    public List<string> Bodies { get; } = [];
+    public Func<CancellationToken, Task<long>>? Sender { get; init; }
     public Task<JsonElement[]> Poll(string token, long offset, CancellationToken ct) => Task.FromResult(Array.Empty<JsonElement>());
-    public Task<long> Send(string token, long chat, string body, bool keyboard, CancellationToken ct) => Task.FromResult(1L);
+    public Task<long> Send(string token, long chat, string body, bool keyboard, CancellationToken ct)
+    {
+        Bodies.Add(body);
+        return Sender?.Invoke(ct) ?? Task.FromResult(1L);
+    }
     public Task<string> Username(string token, CancellationToken ct) => Task.FromResult("test_bot");
 }

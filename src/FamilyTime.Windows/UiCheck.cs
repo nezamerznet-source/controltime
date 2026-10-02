@@ -6,6 +6,17 @@ namespace FamilyTime.Windows;
 
 internal static class UiCheck
 {
+    internal sealed class TelegramApi : ITelegramApi
+    {
+        internal List<string> Reports { get; } = [];
+        public Task<System.Text.Json.JsonElement[]> Poll(string token, long offset, CancellationToken ct) =>
+            Task.FromResult(Array.Empty<System.Text.Json.JsonElement>());
+        public Task<string> Username(string token, CancellationToken ct) => Task.FromResult("ui_check");
+        public Task<long> Send(string token, long chat, string body, bool keyboard, CancellationToken ct)
+        {
+            Reports.Add(body); return Task.FromResult(1L);
+        }
+    }
     internal static void Capture(Window window, string path)
     {
         window.UpdateLayout();

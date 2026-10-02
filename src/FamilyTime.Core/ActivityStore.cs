@@ -163,11 +163,11 @@ public sealed class ActivityStore : IDisposable
         lock (gate) return db.Query("SELECT id,title,body FROM alerts WHERE local_state='pending' ORDER BY created LIMIT 10").Select(r => (r[0], r[1], r[2])).ToArray();
     }
     public void MarkLocalAttempted(string id) { lock (gate) db.Run("UPDATE alerts SET local_state='attempted' WHERE id=?", id); }
-    public Outgoing? NextOutgoing(DateTimeOffset now)
+    public Outgoing? NextOutgoing(DateTimeOffset now, string? id = null)
     {
         lock (gate)
         {
-            var r = db.Query("SELECT id,chat,generation,body,kind,attempts,created,keyboard FROM outbox WHERE status='pending' AND next_try<=? ORDER BY created LIMIT 1", Epoch(now)).FirstOrDefault();
+            var r = db.Query("SELECT id,chat,generation,body,kind,attempts,created,keyboard FROM outbox WHERE status='pending' AND next_try<=? AND (? IS NULL OR id=?) ORDER BY (kind='shutdown') DESC,created LIMIT 1", Epoch(now), id, id).FirstOrDefault();
             return r is null ? null : new(r[0], long.Parse(r[1]), int.Parse(r[2]), r[3], r[4], int.Parse(r[5]), Time(r[6]), r[7] == "1");
         }
     }

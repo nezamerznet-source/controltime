@@ -151,13 +151,19 @@ public partial class App : System.Windows.Application
     {
         try
         {
-            Runtime = new AppRuntime(startupCheckDirectory, integrateWindows: false);
+            var telegramCheck = new UiCheck.TelegramApi();
+            Runtime = new AppRuntime(startupCheckDirectory, integrateWindows: false, telegramApi: telegramCheck);
             Dashboard = new MainWindow(Runtime); MainWindow = Dashboard;
             Dashboard.Restore(); await Task.Delay(250);
             var settings = Dashboard.OpenSettingsWindow ?? throw new Exception("First-run settings did not open.");
             settings.SaveAndContinue(); await Task.Delay(150);
             if (!settings.IsVisible || !Dashboard.IsVisible || !Runtime.Settings.SetupCompleted)
                 throw new Exception("Saving first-run settings hid a window or did not start accounting.");
+            var shutdownBox = (System.Windows.Controls.CheckBox)settings.FindName("ShutdownReportBox");
+            shutdownBox.IsChecked = false; settings.SaveAndContinue();
+            if (Runtime.Store.LoadSettings().ShutdownReport) throw new Exception("Shutdown report opt-out was not saved.");
+            shutdownBox.IsChecked = true; settings.SaveAndContinue();
+            if (!Runtime.Store.LoadSettings().ShutdownReport) throw new Exception("Shutdown report opt-in was not saved.");
             // Deterministic data in the isolated test database ensures category templates are rendered,
             // even if the CI desktop happens to report idle/locked. An empty dashboard missed this crash.
             var sampleEnd = DateTimeOffset.UtcNow.AddMinutes(-1);
@@ -203,11 +209,29 @@ public partial class App : System.Windows.Application
             for (int attempt = 0; attempt < 5; attempt++) Runtime.Parent.Check("wrong");
             var reloadedGuard = new ParentAccess(Runtime.Store, Runtime.Store.LoadSettings);
             if (reloadedGuard.Check("parent-check-123") is null) throw new Exception("Password retry delay was not persisted.");
+            Runtime.UpdateSettings(c => c with { ParentChatId = 101, ParentUserId = 101, ProtectedToken = SecretStore.Protect("test-only") });
+            // Call the actual WPF override, without asking Windows/CI to shut down.
+            // A fake API proves routing and delivery without sending anyone a message.
+            // WPF exposes the event args but its constructor is internal.
+            var ending = (SessionEndingCancelEventArgs)Activator.CreateInstance(typeof(SessionEndingCancelEventArgs),
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
+                binder: null, args: [ReasonSessionEnding.Shutdown], culture: null)!;
+            OnSessionEnding(ending); OnSessionEnding(ending);
+            if (ending.Cancel || telegramCheck.Reports.Count != 1 || !telegramCheck.Reports[0].Contains("Тестовая игра"))
+                throw new Exception("Windows session-ending report failed or was duplicated.");
             File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "startup-check.txt"),
-                "PASS: first-run save, settings reopen, hide and event-driven restore, password verification and persistence. No Telegram required.");
+                "PASS: first-run save, settings reopen, hide and event-driven restore, password verification and persistence; shutdown report setting and WPF session-ending callback with fake Telegram. No real shutdown or Telegram messages.");
             Shutdown(0);
         }
         catch (Exception ex) { WriteStartupError(ex, Path.GetTempPath()); Shutdown(1); }
+    }
+    protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+    {
+        base.OnSessionEnding(e);
+        if (e.Cancel) return;
+        try { Runtime?.EndWindowsSession(e.ReasonSessionEnding == ReasonSessionEnding.Logoff); }
+        catch (Exception ex) { WriteStartupError(ex, startupCheck ? Path.GetTempPath() : WindowsIntegration.DataDirectory); }
+        // WPF shuts down after this callback; do not use async void or request a password here.
     }
     protected override void OnExit(ExitEventArgs e)
     {

@@ -14,7 +14,7 @@ Unicode True
   !define DELETE_LIST "..\artifacts\uninstall-files.nsh"
 !endif
 !ifndef APP_VERSION
-  !define APP_VERSION "0.1.2"
+!define APP_VERSION "0.1.3"
 !endif
 
 Name "Family Time"

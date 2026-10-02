@@ -17,6 +17,8 @@ public sealed class AppRuntime : IDisposable
     private string encryptedCache = "", tokenCache = "";
     private AppSettings config;
     private readonly bool integrateWindows;
+    private bool endingWindowsSession;
+    private readonly string sessionEndId = Guid.NewGuid().ToString("N");
     public ParentAccess Parent { get; }
     public AppSettings Settings { get { lock (gate) return config; } }
     public bool Paused { get; private set; }
@@ -26,7 +28,7 @@ public sealed class AppRuntime : IDisposable
     public TelegramWorker Telegram { get; }
     public event Action<string, string>? Notify;
 
-    public AppRuntime(string? dataDirectory = null, bool integrateWindows = true)
+    public AppRuntime(string? dataDirectory = null, bool integrateWindows = true, ITelegramApi? telegramApi = null)
     {
         this.integrateWindows = integrateWindows;
         Store = new ActivityStore(Path.Combine(dataDirectory ?? WindowsIntegration.DataDirectory, "activity.db"));
@@ -38,7 +40,7 @@ public sealed class AppRuntime : IDisposable
             var start = previous.Value < now.AddDays(-config.SummaryDays) ? now.AddDays(-config.SummaryDays) : previous.Value;
             Store.Append([new(start, now, ActivityKind.Unknown, "", "Учёт не работал", "", "Другое")], config.Zone);
         }
-        Telegram = new TelegramWorker(Store, new TelegramApi(http), () => Settings, Token, CurrentReport, Bind);
+        Telegram = new TelegramWorker(Store, telegramApi ?? new TelegramApi(http), () => Settings, Token, CurrentReport, Bind);
         probe.BoundaryChanged += Boundary;
     }
     public void Start()
@@ -50,6 +52,7 @@ public sealed class AppRuntime : IDisposable
     {
         lock (gate)
         {
+            if (endingWindowsSession) return;
             if (!config.SetupCompleted) { engine.Reset(); State = "Требуется первый запуск"; return; }
             var sample = probe.Read(config, Paused, Browsers);
             var slices = engine.Observe(sample, TimeSpan.FromMinutes(config.IdleMinutes));
@@ -219,6 +222,28 @@ public sealed class AppRuntime : IDisposable
     public void ClearHistory()
     {
         lock (gate) { Store.ClearHistory(); engine.Reset(); lastSchedule = default; }
+    }
+    public void EndWindowsSession(bool loggingOff)
+    {
+        string? id;
+        lock (gate)
+        {
+            if (endingWindowsSession) return;
+            Tick();
+            endingWindowsSession = true;
+            id = SessionEndReport.Enqueue(Store, config, DateTimeOffset.UtcNow, loggingOff, sessionEndId);
+        }
+        // Cancel long polling and any ordinary send before the bounded last attempt.
+        // No parent password or shutdown cancellation: respect the Windows action.
+        cancellation.Cancel();
+        if (id is null) return;
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        try
+        {
+            Task.Run(() => Telegram.SendPending(deadline.Token, id)).GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException) { /* Snapshot remains pending for the next launch. */ }
+        catch { Error = "Отчёт перед выключением сохранён; отправка будет повторена при следующем запуске."; }
     }
     public void Dispose()
     {

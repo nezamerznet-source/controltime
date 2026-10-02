@@ -30,6 +30,7 @@ public partial class SettingsWindow : Window
         IdleBox.Text = c.IdleMinutes.ToString(); SessionBox.Text = c.SessionMinutes.ToString();
         ZoneText.Text = "Часовой пояс учёта: " + c.TimeZoneId + ". Фиксируется при первом запуске.";
         DailyReportBox.IsChecked = c.DailyReport; SessionReportBox.IsChecked = c.SessionReport; WeeklyReportBox.IsChecked = c.WeeklyReport;
+        ShutdownReportBox.IsChecked = c.ShutdownReport;
         EveningReportBox.IsChecked = c.EveningReport; EveningHourBox.Text = c.EveningHour.ToString();
         HistoryDaysBox.Text = c.HistoryDays.ToString(); SummaryDaysBox.Text = c.SummaryDays.ToString();
         DonateButton.Visibility = Branding.Valid(Branding.Support(c)) ? Visibility.Visible : Visibility.Collapsed;
@@ -50,6 +51,7 @@ public partial class SettingsWindow : Window
             LimitEnabled = LimitEnabledBox.IsChecked == true, LimitMinutes = Number(LimitBox, "Лимит"), WarningMinutes = Number(WarningBox, "Предупреждение"),
             IdleMinutes = Number(IdleBox, "Простой"), SessionMinutes = Number(SessionBox, "Конец сеанса"),
             DailyReport = DailyReportBox.IsChecked == true, SessionReport = SessionReportBox.IsChecked == true, WeeklyReport = WeeklyReportBox.IsChecked == true,
+            ShutdownReport = ShutdownReportBox.IsChecked == true,
             EveningReport = EveningReportBox.IsChecked == true, EveningHour = Number(EveningHourBox, "Час отчёта"),
             HistoryDays = Number(HistoryDaysBox, "Срок истории"), SummaryDays = Number(SummaryDaysBox, "Срок итогов")
         });

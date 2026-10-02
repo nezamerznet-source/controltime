@@ -75,6 +75,7 @@ public sealed class TelegramWorker(ActivityStore store, ITelegramApi api, Func<A
 {
     public string Status { get; private set; } = "Telegram не подключён";
     private DateTimeOffset lastReply;
+    private readonly SemaphoreSlim sending = new(1, 1);
     public async Task Run(CancellationToken ct)
     {
         await Task.WhenAll(PollLoop(ct), SendLoop(ct));
@@ -141,34 +142,48 @@ public sealed class TelegramWorker(ActivityStore store, ITelegramApi api, Func<A
             if (reply is not null) store.Enqueue($"command:{generation}:{id}", destination, generation, reply, "request", now, true);
         });
     }
+    // The regular sender and the last shutdown attempt share one gate: a queued
+    // message cannot be sent twice concurrently. Cancellation leaves it durable.
+    public async Task<bool> SendPending(CancellationToken ct, string? id = null)
+    {
+        await sending.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            var config = settings(); var key = token();
+            var item = store.NextOutgoing(DateTimeOffset.UtcNow, id);
+            if (item is null || key.Length == 0 || config.ParentChatId == 0) return false;
+            if (item.Generation != config.TelegramGeneration || item.ChatId != config.ParentChatId)
+            { store.Retry(item.Id, DateTimeOffset.UtcNow, true); return false; }
+            try
+            {
+                var suffix = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(item.Id)))[..8];
+                var body = item.Body;
+                if (DateTimeOffset.UtcNow - item.Created > TimeSpan.FromMinutes(5)) body += "\nОтправлено с задержкой; время события/среза указано выше.";
+                body += "\n№ " + suffix;
+                if (body.Length > 4000) body = body[..3980] + "…";
+                long messageId = await api.Send(key, item.ChatId, body, item.Keyboard, ct).ConfigureAwait(false);
+                store.MarkSent(item.Id, messageId);
+                return true;
+            }
+            catch (TelegramError error)
+            {
+                Status = error.Message;
+                int wait = Math.Max(error.RetryAfter, (int)Math.Min(3600, 5 * Math.Pow(2, Math.Min(item.Attempts, 10))));
+                store.Retry(item.Id, DateTimeOffset.UtcNow.AddSeconds(wait), error.Permanent);
+                return false;
+            }
+        }
+        finally { sending.Release(); }
+    }
     async Task SendLoop(CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
         {
             try
             {
-                var config = settings(); var key = token();
-                var item = store.NextOutgoing(DateTimeOffset.UtcNow);
-                if (item is null || key.Length == 0 || config.ParentChatId == 0) { await Task.Delay(1000, ct); continue; }
-                if (item.Generation != config.TelegramGeneration || item.ChatId != config.ParentChatId)
-                { store.Retry(item.Id, DateTimeOffset.UtcNow, true); continue; }
-                try
-                {
-                    var suffix = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(item.Id)))[..8];
-                    var body = item.Body;
-                    if (DateTimeOffset.UtcNow - item.Created > TimeSpan.FromMinutes(5)) body += "\nОтправлено с задержкой; время события/среза указано выше.";
-                    body += "\n№ " + suffix;
-                    if (body.Length > 4000) body = body[..3980] + "…";
-                    long messageId = await api.Send(key, item.ChatId, body, item.Keyboard, ct);
-                    store.MarkSent(item.Id, messageId);
-                    await Task.Delay(1000, ct);
-                }
-                catch (TelegramError error)
-                {
-                    Status = error.Message;
-                    int wait = Math.Max(error.RetryAfter, (int)Math.Min(3600, 5 * Math.Pow(2, Math.Min(item.Attempts, 10))));
-                    store.Retry(item.Id, DateTimeOffset.UtcNow.AddSeconds(wait), error.Permanent);
-                }
+                await SendPending(ct).ConfigureAwait(false);
+                await Task.Delay(1000, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
             catch { Status = "Не удалось отправить сообщение; оно сохранено в очереди."; await Delay(10, ct); }
