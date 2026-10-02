@@ -159,16 +159,18 @@ public partial class App : System.Windows.Application
             settings.SaveAndContinue(); await Task.Delay(150);
             if (!settings.IsVisible || !Dashboard.IsVisible || !Runtime.Settings.SetupCompleted)
                 throw new Exception("Saving first-run settings hid a window or did not start accounting.");
-            var shutdownBox = (System.Windows.Controls.CheckBox)settings.FindName("ShutdownReportBox");
-            shutdownBox.IsChecked = false; settings.SaveAndContinue();
-            if (Runtime.Store.LoadSettings().ShutdownReport) throw new Exception("Shutdown report opt-out was not saved.");
-            shutdownBox.IsChecked = true; settings.SaveAndContinue();
-            if (!Runtime.Store.LoadSettings().ShutdownReport) throw new Exception("Shutdown report opt-in was not saved.");
             // Deterministic data in the isolated test database ensures category templates are rendered,
             // even if the CI desktop happens to report idle/locked. An empty dashboard missed this crash.
             var sampleEnd = DateTimeOffset.UtcNow.AddMinutes(-1);
             Runtime.Store.Append([new(sampleEnd.AddMinutes(-1), sampleEnd, ActivityKind.Active,
                 "ui-check-game", "Тестовая игра", "", "Игры")], Runtime.Settings.Zone);
+            // Seed older activity before further settings saves flush current observations;
+            // otherwise the store correctly discards overlapping historical test intervals.
+            var shutdownBox = (System.Windows.Controls.CheckBox)settings.FindName("ShutdownReportBox");
+            shutdownBox.IsChecked = false; settings.SaveAndContinue();
+            if (Runtime.Store.LoadSettings().ShutdownReport) throw new Exception("Shutdown report opt-out was not saved.");
+            shutdownBox.IsChecked = true; settings.SaveAndContinue();
+            if (!Runtime.Store.LoadSettings().ShutdownReport) throw new Exception("Shutdown report opt-in was not saved.");
             await Task.Run(() => Runtime.Tick());
             await Task.Delay(1100); await Task.Run(() => Runtime.Tick());
             if (Runtime.LastObservation is null) throw new Exception("Accounting did not start after saving settings.");
@@ -218,7 +220,8 @@ public partial class App : System.Windows.Application
                 binder: null, args: [ReasonSessionEnding.Shutdown], culture: null)!;
             OnSessionEnding(ending); OnSessionEnding(ending);
             if (ending.Cancel || telegramCheck.Reports.Count != 1 || !telegramCheck.Reports[0].Contains("Тестовая игра"))
-                throw new Exception("Windows session-ending report failed or was duplicated.");
+                throw new Exception($"Windows session-ending report failed: cancelled={ending.Cancel}, reports={telegramCheck.Reports.Count}, " +
+                    $"containsGame={telegramCheck.Reports.Any(r => r.Contains("Тестовая игра"))}, error={Runtime.Error}, queue={Runtime.Store.QueueCounts()}.");
             File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "startup-check.txt"),
                 "PASS: first-run save, settings reopen, hide and event-driven restore, password verification and persistence; shutdown report setting and WPF session-ending callback with fake Telegram. No real shutdown or Telegram messages.");
             Shutdown(0);
