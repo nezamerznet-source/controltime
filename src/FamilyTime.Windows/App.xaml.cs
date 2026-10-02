@@ -181,6 +181,16 @@ public partial class App : System.Windows.Application
             Dashboard.OpenSettings(); await Task.Delay(100);
             settings = Dashboard.OpenSettingsWindow ?? throw new Exception("Settings cannot be reopened after setup.");
             settings.SaveAndContinue(); settings.Close();
+            const string cloudCheckToken = "local-startup-check-not-an-access-token";
+            Runtime.UpdateSettings(c => c with { CloudUrl = "https://family.example.com", ProtectedCloudToken = SecretStore.Protect(cloudCheckToken) });
+            var storedCloud = Runtime.Store.LoadSettings();
+            if (storedCloud.CloudLinked || SecretStore.Unprotect(storedCloud.ProtectedCloudToken) != cloudCheckToken)
+                throw new Exception("Cloud credential protection or optional setup state failed.");
+            Dashboard.OpenSettings();
+            settings = Dashboard.OpenSettingsWindow ?? throw new Exception("Cloud settings cannot be reopened.");
+            if (((System.Windows.Controls.TextBox)settings.FindName("CloudUrlBox")).Text != "https://family.example.com")
+                throw new Exception("Cloud settings did not persist.");
+            settings.Close(); Runtime.DisconnectCloud();
             string hash = ParentPassword.Create("parent-check-123");
             Runtime.UpdateSettings(c => c with { ParentPasswordHash = hash });
             if (!Runtime.Parent.Required || Runtime.Parent.Check("wrong") is null || Runtime.Parent.Check("parent-check-123") is not null)

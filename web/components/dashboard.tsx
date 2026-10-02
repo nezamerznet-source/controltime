@@ -6,9 +6,10 @@ import { activities, categoryColor, clock, combine, dateLabel, dayRange, duratio
 
 type View='overview'|'history'|'devices';
 type User={email:string};
+class RequestError extends Error { constructor(message:string,public status:number){super(message);} }
 async function api<T>(path:string,method='GET',body?:unknown):Promise<T>{
   const res=await fetch(path,{method,headers:body?{'Content-Type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined,cache:'no-store'});
-  const data=await res.json();if(!res.ok)throw new Error(data.error??'Не удалось связаться с кабинетом.');return data;
+  const data=await res.json();if(!res.ok)throw new RequestError(data.error??'Не удалось связаться с кабинетом.',res.status);return data;
 }
 function Brand(){return <div className="brand"><span className="brand-symbol"><Clock3 size={23}/></span><span>family<span className="brand-light">time</span><small>Время для важного</small></span></div>;}
 function Help({text}:{text:string}){return <span className="help" tabIndex={0} aria-label={text}><CircleHelp size={15}/><span role="tooltip">{text}</span></span>;}
@@ -69,8 +70,8 @@ export default function Dashboard(){
     const number=++requestNumber.current;setLoading(true);const q=new URLSearchParams();if(deviceId)q.set('device',deviceId);
     if(view==='history'&&date){q.set('from',date);q.set('to',date);}else if(data?.today&&period===30){q.set('from',shiftDay(data.today,-29));q.set('to',data.today);}
     try{const next=await api<DashboardData>('/api/dashboard?'+q);if(number===requestNumber.current){setData(next);setError('');}}
-    catch(e){if(number===requestNumber.current)setError((e as Error).message);}finally{if(number===requestNumber.current)setLoading(false);}
-  },[session?.user,passwordMode,deviceId,view,date,period,data?.today]);
+    catch(e){if(number===requestNumber.current){setError((e as Error).message);if(e instanceof RequestError&&e.status===401){setData(null);void checkSession();}}}finally{if(number===requestNumber.current)setLoading(false);}
+  },[session?.user,passwordMode,deviceId,view,date,period,data?.today,checkSession]);
   useEffect(()=>{void load();const timer=setInterval(()=>{if(document.visibilityState==='visible')void load();},60_000);return()=>{clearInterval(timer);requestNumber.current++;};},[load]);
   async function logout(){try{await api('/api/auth','POST',{action:'sign-out'});setData(null);setDeviceId('');setDate('');await checkSession();}catch(e){setError((e as Error).message);}}
   async function remove(device:Device){if(!confirm(`Удалить «${device.name}» и всю его историю из кабинета? Доступ приложения будет отозван. Данные на компьютере сохранятся.`))return;setDeleting(device.id);try{await api('/api/devices/'+device.id,'DELETE');if(deviceId===device.id){setDeviceId('');}else void load();setData(null);}catch(e){setError((e as Error).message);}finally{setDeleting('');}}
